@@ -21,7 +21,7 @@ import {
 import type { CashFlowLine } from "@/lib/finance-cashflow";
 import { greenCoverageDays, monthName, receivableSnapshot, salesPace, type BriefPart, type SalesGeo } from "@/lib/command-center";
 import { roastPace } from "@/lib/roast-pace";
-import { goalProgress, parseGoalInput, weekWins, type CommandInsights, type SnoozeAction } from "@/lib/command-center-v6";
+import { goalProgress, parseGoalInput, saleTime, weekWins, type CommandInsights, type SnoozeAction, type TodaySales } from "@/lib/command-center-v6";
 
 /**
  * Central de comando (proposta aprovada em 26/11), em três perguntas:
@@ -62,7 +62,7 @@ export type TimelineItem = { key: string; date: string; label: string; amount: n
 
 export function CommandCenterV4({
   home, greeting, firstName, summary, tasks, greenTotal, greenReserved, greenFree, cashLines, financeReady, geo, newMenu, brief, cashView, timeline,
-  onSnooze, onUndoSnooze, insights, onSaveGoal, freshness,
+  onSnooze, onUndoSnooze, insights, onSaveGoal, freshness, today: todaySales, freshIds,
 }: {
   home: CenterHome; greeting: string; firstName: string; summary: string; tasks: CenterTask[];
   greenTotal: number; greenReserved: number; greenFree: number; cashLines: CashFlowLine[];
@@ -73,6 +73,8 @@ export function CommandCenterV4({
   insights?: CommandInsights | null;
   onSaveGoal?: (month: string, salesTarget: number | null) => Promise<string | null>;
   freshness?: string;
+  today?: TodaySales | null;
+  freshIds?: Set<string>;
 }) {
   const [undo, setUndo] = React.useState<{ task: CenterTask; text: string } | null>(null);
   React.useEffect(() => {
@@ -126,6 +128,8 @@ export function CommandCenterV4({
         </section>
       )}
 
+      <TodayStrip sales={todaySales ?? null} freshIds={freshIds ?? new Set()} />
+
       <section aria-label="Números do mês" className="grid grid-cols-1 gap-3 sm:grid-cols-2 min-[1360px]:grid-cols-4">
         <CashCard view={cashView} />
         <div className={`${card} p-4`}>
@@ -143,6 +147,12 @@ export function CommandCenterV4({
             {geo && geo.previousRevenue > 0 ? `vs. ${brl.format(geo.previousRevenue)} em ${monthName(today, -1).slice(0, 3)}. até o dia ${pace.day} · ` : `hoje ${brl.format(home.salesToday)} · `}
             ritmo {brl.format(pace.perDay)}/dia → <b className="text-[var(--bbos-text-primary)]">projeção {brl.format(pace.projection)}</b>
           </p>
+          {todaySales && todaySales.marketplaceMonth.amount > 0 && (
+            <p className="mt-1 text-[12px] text-[var(--bbos-text-secondary)]">
+              inclui {todaySales.marketplaceMonth.byChannel.map((row) => `${row.channel} ${brl.format(row.amount)}`).join(" · ")}
+              {" "}<Link href="/commerce/marketplaces" className="font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">{todaySales.marketplaceMonth.orders} {todaySales.marketplaceMonth.orders === 1 ? "pedido a importar" : "pedidos a importar"}</Link>
+            </p>
+          )}
           <SalesGoal goal={goal} insights={insights ?? null} onSave={onSaveGoal} />
           <Link href="/vendas" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">Ver vendas →</Link>
         </div>
@@ -219,15 +229,15 @@ export function CommandCenterV4({
                       {task.why && <p className="mt-0.5 text-[12px] font-semibold" style={{ color: task.tone === "critical" ? GREEN : "var(--bbos-text-secondary)" }}>{task.why}</p>}
                       {(task.repeatedDays ?? 0) >= 7 && <p className="mt-0.5 text-[11.5px] text-[var(--bbos-text-secondary)]">aparece há {task.repeatedDays} dias · resolva ou adie</p>}
                     </div>
-                    <div className="col-start-3 flex flex-wrap items-center gap-1.5 justify-self-start sm:col-start-4 sm:justify-self-end">
+                    <div className="col-start-3 flex flex-wrap items-center gap-1.5 justify-self-start sm:col-start-4 sm:flex-col sm:items-end sm:justify-self-end">
                       <Link href={task.href} className={`inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl px-3.5 text-[13px] font-bold ${index === 0 ? "bg-[var(--bbos-action-primary)] text-white hover:bg-[var(--bbos-action-primary-hover)]" : "border border-[var(--bbos-border)] bg-white hover:bg-[var(--bbos-surface-subtle)]"}`}>
                         {task.action}
                       </Link>
                       {onSnooze && (
                         <span className="inline-flex overflow-hidden rounded-xl border border-[var(--bbos-border)] text-[12px] font-semibold text-[var(--bbos-text-secondary)]">
-                          <button type="button" onClick={() => act(task, "DONE")} title="Já resolvi: some por 30 dias (volta se a situação mudar)" className="inline-flex min-h-10 items-center gap-1 px-2.5 hover:bg-[var(--bbos-surface-subtle)]"><Check size={13} aria-hidden />Feito</button>
-                          <button type="button" onClick={() => act(task, "TOMORROW")} title="Lembrar amanhã às 6h" className="min-h-10 border-l border-[var(--bbos-border)] px-2.5 hover:bg-[var(--bbos-surface-subtle)]">Amanhã</button>
-                          <button type="button" onClick={() => act(task, "WEEK")} title="Adiar 7 dias" className="min-h-10 border-l border-[var(--bbos-border)] px-2.5 hover:bg-[var(--bbos-surface-subtle)]">7 dias</button>
+                          <button type="button" onClick={() => act(task, "DONE")} title="Já resolvi: some por 30 dias (volta se a situação mudar)" className="inline-flex min-h-9 items-center gap-1 px-2.5 hover:bg-[var(--bbos-surface-subtle)]"><Check size={13} aria-hidden />Feito</button>
+                          <button type="button" onClick={() => act(task, "TOMORROW")} title="Lembrar amanhã às 6h" className="min-h-9 border-l border-[var(--bbos-border)] px-2.5 hover:bg-[var(--bbos-surface-subtle)]">Amanhã</button>
+                          <button type="button" onClick={() => act(task, "WEEK")} title="Adiar 7 dias" className="min-h-9 border-l border-[var(--bbos-border)] px-2.5 hover:bg-[var(--bbos-surface-subtle)]">7 dias</button>
                         </span>
                       )}
                     </div>
@@ -542,5 +552,48 @@ function GrowthRow({ insights }: { insights: CommandInsights }) {
         )}
       </section>
     </div>
+  );
+}
+
+
+/** Vendas de hoje, ao vivo: BBOS + marketplaces, por canal e os últimos pedidos. */
+function TodayStrip({ sales, freshIds }: { sales: TodaySales | null; freshIds: Set<string> }) {
+  if (!sales) return null;
+  const money2 = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+  return (
+    <section aria-label="Vendas de hoje" aria-live="polite" className={`${card} grid gap-3 p-4 lg:grid-cols-[minmax(220px,auto)_1fr] lg:items-center`}>
+      <div className="flex items-center gap-3">
+        <span aria-hidden className="relative flex size-2.5"><span className="absolute inline-flex size-full rounded-full bg-[var(--bbos-success)] opacity-60 motion-safe:animate-ping" /><span className="relative inline-flex size-2.5 rounded-full bg-[var(--bbos-success)]" /></span>
+        <div>
+          <p className={label}>Vendas de hoje</p>
+          <p className="text-[24px] font-bold leading-tight tabular-nums">{money2.format(sales.total)}<span className="ml-2 text-[13px] font-semibold text-[var(--bbos-text-secondary)]">{sales.orders} {sales.orders === 1 ? "pedido" : "pedidos"}</span></p>
+          <p className="text-[11px] text-[var(--bbos-text-secondary)]">atualiza a cada minuto · {saleTime(sales.generatedAt)}</p>
+        </div>
+      </div>
+      {sales.orders === 0 ? (
+        <p className="text-[13px] text-[var(--bbos-text-secondary)]">Nenhuma venda ainda hoje. Pedidos do BBOS, da loja e dos marketplaces aparecem aqui assim que chegam.</p>
+      ) : (
+        <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            {sales.byChannel.map((row) => (
+              <span key={row.channel} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[12px] font-semibold ${row.marketplace ? "bg-[#fff4d6] text-[#7a5200]" : "bg-[var(--bbos-success-soft,#e6f1ec)] text-[var(--bbos-success,#1f6b4f)]"}`}>
+                {row.channel} <b className="tabular-nums">{brl.format(row.amount)}</b><span className="font-normal opacity-80">· {row.orders}</span>
+              </span>
+            ))}
+          </div>
+          <ul className="flex gap-2 overflow-x-auto pb-1">
+            {sales.feed.map((sale) => (
+              <li key={sale.id} className={`shrink-0 rounded-xl border px-3 py-1.5 text-[12.5px] transition-colors ${freshIds.has(sale.id) ? "border-[var(--bbos-success)] bg-[var(--bbos-success-soft,#e6f1ec)] motion-safe:animate-[fadeIn_.5s_ease]" : "border-[var(--bbos-border)]"}`}>
+                <span className="font-bold tabular-nums">{saleTime(sale.at)}</span>
+                <span className="mx-1.5 text-[var(--bbos-text-secondary)]">{sale.channel}</span>
+                <span className="max-w-[14rem] truncate align-bottom">{sale.customer ?? `#${sale.code}`}</span>
+                <b className="ml-1.5 tabular-nums">{brl.format(sale.amount)}</b>
+                {freshIds.has(sale.id) && <span className="ml-1.5 rounded bg-[var(--bbos-success)] px-1 text-[10px] font-bold uppercase text-white">novo</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }

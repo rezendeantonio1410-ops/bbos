@@ -33,8 +33,10 @@ import {
   saneBufferDays,
   taskSnoozeKey,
   withoutSnoozed,
+  freshSaleIds,
   type CommandInsights,
   type SnoozeAction,
+  type TodaySales,
 } from "@/lib/command-center-v6";
 import { CommandCenterV4 } from "./command-center-v4";
 
@@ -129,6 +131,32 @@ export function HomeCommandV3() {
     }
   }, []);
   React.useEffect(() => { void loadInsights(); }, [loadInsights]);
+
+  // Vendas de hoje (BBOS + marketplaces), atualizadas a cada minuto com a aba visível.
+  const [today, setToday] = React.useState<TodaySales | null>(null);
+  const [freshIds, setFreshIds] = React.useState<Set<string>>(new Set());
+  React.useEffect(() => {
+    let last: TodaySales | null = null;
+    let stopped = false;
+    const load = async () => {
+      if (document.visibilityState === "hidden") return;
+      try {
+        const response = await fetch(`${getApiBaseUrl()}/command-center/today`, { credentials: "include", cache: "no-store" });
+        if (!response.ok || stopped) return;
+        const next = (await response.json()) as TodaySales;
+        setFreshIds(freshSaleIds(last, next));
+        last = next;
+        setToday(next);
+      } catch {
+        /* tenta de novo no próximo minuto */
+      }
+    };
+    void load();
+    const timer = window.setInterval(load, 60_000);
+    const onVisible = () => { if (document.visibilityState === "visible") void load(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { stopped = true; window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, []);
 
   React.useEffect(() => {
     const apiRoot = getApiBaseUrl();
@@ -262,6 +290,8 @@ export function HomeCommandV3() {
       samples={samples}
       insights={insights}
       reloadInsights={loadInsights}
+      today={today}
+      freshIds={freshIds}
     />
   );
 }
@@ -308,13 +338,14 @@ const brlTask = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "B
  */
 function CommandCenter({
   home, greeting, firstName, decisions, state,
-  green, finance, geo, samples, insights, reloadInsights,
+  green, finance, geo, samples, insights, reloadInsights, today, freshIds,
 }: {
   home: HomeData; greeting: string; firstName: string;
   decisions: HomeData["alerts"]; state: EvidenceState;
   green: { total: number; reserved: number; free: number };
   finance: FinanceSnapshot; geo: SalesGeo | null; samples: ExportSample[];
   insights: CommandInsights | null; reloadInsights: () => Promise<void>;
+  today: TodaySales | null; freshIds: Set<string>;
 }) {
   // Tarefas adiadas (Feito / Amanhã / 7 dias): vêm do servidor e somem na hora ao clicar.
   const [snoozed, setSnoozed] = React.useState<Set<string>>(new Set());
@@ -361,6 +392,9 @@ function CommandCenter({
     return null;
   };
   const pace = roastPace(home.productionActualKg, home.productionPlannedKg);
+  // Marketplace que ainda está só na caixa de entrada entra nas vendas do mês.
+  const marketplaceMonth = today?.marketplaceMonth.amount ?? 0;
+  const salesMonthAll = home.salesMonth + marketplaceMonth;
   const minimum = finance?.minimum ?? 5000;
   // Previsão do caixa (mesma do Fluxo de caixa): saldo + títulos + despesas fixas.
   const forecast = finance
@@ -380,8 +414,8 @@ function CommandCenter({
     minimum,
   } : null;
   const brief = buildBrief({
-    projection: salesPace(home.salesMonth).projection,
-    revenue: geo?.revenue ?? home.salesMonth,
+    projection: salesPace(salesMonthAll).projection,
+    revenue: (geo?.revenue ?? home.salesMonth) + marketplaceMonth,
     previousRevenue: geo?.previousRevenue ?? 0,
     worst: known && forecast ? { date: forecast.worst.date, balance: forecast.worst.balance, cause: worstCause } : null,
     minimum,
@@ -524,7 +558,9 @@ function CommandCenter({
           : "Nada pede decisão agora";
   return (
     <CommandCenterV4
-      home={home}
+      home={{ ...home, salesMonth: salesMonthAll, salesToday: today?.total ?? home.salesToday }}
+      today={today}
+      freshIds={freshIds}
       greeting={greeting}
       firstName={firstName}
       summary={summary}

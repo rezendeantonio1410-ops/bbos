@@ -4,6 +4,7 @@ import type { Request } from "express";
 import { AuthService } from "./auth.service";
 import {
   monthMargin,
+  salesOfTheDay,
   payerDelays,
   repurchaseHealth,
   snoozeUntil,
@@ -191,6 +192,68 @@ export class CommandCenterController {
       channels: channelRows.map((row) => ({ name: row.name, revenue: Number(row.revenue), orders: Number(row.orders) })),
       payerDelays: delays.slice(0, 30),
       snoozes: snoozes.map((row) => ({ taskKey: row.taskKey, action: row.action, until: row.until })),
+    };
+  }
+
+  /**
+   * Vendas de hoje, leve para atualizar a cada minuto: pedidos do BBOS mais os
+   * de marketplace que ainda não viraram pedido (sem contar duas vezes), por
+   * canal, e os últimos pedidos que chegaram. Também o mês do marketplace que
+   * ainda está só na caixa de entrada.
+   */
+  @Get("today")
+  @Header("Cache-Control", "private, no-store")
+  async today(@Req() req: Request) {
+    const { companyId } = await this.actor(req);
+    const now = new Date();
+    const local = new Date(now.getTime() - 3 * 3_600_000);
+    const dayStart = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 3, 0, 0));
+    const month = saoPauloMonth(now);
+    const [orders, inbox, inboxMonth] = await Promise.all([
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT o.id,COALESCE(o."orderNumber",o.code) AS code,o."createdAt" AS at,o."totalAmount"::float AS amount,
+                c.name AS customer,COALESCE(ch.name,'Venda direta') AS channel,ch."platformCode" AS platform
+           FROM "SalesOrder" o
+           JOIN "Customer" c ON c.id=o."customerId"
+           LEFT JOIN "SalesChannel" ch ON ch.id=o."salesChannelId"
+          WHERE o."companyId"=$1 AND o."orderType"='COMMERCIAL' AND o.status::text NOT IN ('CANCELLED','DRAFT')
+            AND (o."orderedAt">=$2 OR o."createdAt">=$2)
+          ORDER BY o."createdAt" DESC`,
+        companyId, dayStart,
+      ),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT moi.id,moi."externalOrderId" AS code,COALESCE(moi."orderedAt",moi."firstSeenAt") AS at,
+                COALESCE(moi."grossAmount",0)::float AS amount,ch.name AS channel,ch."platformCode" AS platform
+           FROM "MarketplaceOrderInbox" moi
+           JOIN "SalesChannel" ch ON ch.id=moi."salesChannelId"
+          WHERE moi."companyId"=$1 AND moi."salesOrderId" IS NULL
+            AND LOWER(COALESCE(moi."externalStatus",'')) NOT IN ('cancelled','canceled','cancelado')
+            AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=$2
+          ORDER BY 3 DESC`,
+        companyId, dayStart,
+      ).catch(() => []),
+      this.database.$queryRawUnsafe<any[]>(
+        `SELECT ch.name AS channel,COUNT(*)::int AS orders,COALESCE(SUM(moi."grossAmount"),0)::float AS amount
+           FROM "MarketplaceOrderInbox" moi
+           JOIN "SalesChannel" ch ON ch.id=moi."salesChannelId"
+          WHERE moi."companyId"=$1 AND moi."salesOrderId" IS NULL
+            AND LOWER(COALESCE(moi."externalStatus",'')) NOT IN ('cancelled','canceled','cancelado')
+            AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=$2
+          GROUP BY ch.name ORDER BY 3 DESC`,
+        companyId, month.start,
+      ).catch(() => []),
+    ]);
+    return {
+      generatedAt: now.toISOString(),
+      ...salesOfTheDay(
+        orders.map((o) => ({ id: o.id, code: o.code, at: o.at, amount: o.amount, customer: o.customer, channel: o.channel, marketplace: Boolean(o.platform && o.platform !== "BISPO_STORE") })),
+        inbox.map((o) => ({ id: `mp-${o.id}`, code: o.code, at: o.at, amount: o.amount, customer: null, channel: o.channel, marketplace: true })),
+      ),
+      marketplaceMonth: {
+        amount: inboxMonth.reduce((sum, row) => sum + Number(row.amount), 0),
+        orders: inboxMonth.reduce((sum, row) => sum + Number(row.orders), 0),
+        byChannel: inboxMonth.map((row) => ({ channel: row.channel, amount: Number(row.amount), orders: Number(row.orders) })),
+      },
     };
   }
 

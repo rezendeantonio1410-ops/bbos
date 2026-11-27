@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { monthMargin, payerDelays, repurchaseHealth, snoozeUntil, validateGoal, validateTaskKey } from "./command-center-insights";
+import { monthMargin, salesOfTheDay, payerDelays, repurchaseHealth, snoozeUntil, validateGoal, validateTaskKey } from "./command-center-insights";
 
 const now = new Date("2026-11-27T12:00:00Z");
 const d = (iso: string) => new Date(`${iso}T12:00:00Z`);
@@ -58,4 +58,18 @@ test("margem usa só itens com custo e informa a cobertura", () => {
     revenue: 20000, marginPercent: 35, marginAmount: 7000, coveragePercent: 80,
   });
   assert.equal(monthMargin({ revenue: 1000, costedRevenue: 0, cost: 0 }).marginPercent, null);
+});
+
+test("vendas do dia somam BBOS e marketplace, por canal e mais recentes primeiro", () => {
+  const day = salesOfTheDay(
+    [{ id: "1", code: "B-1", at: "2026-11-27T13:00:00Z", amount: 288, customer: "Cafeteria Exemplo", channel: "Consumidor final", marketplace: false }],
+    [
+      { id: "mp-1", code: "200001", at: "2026-11-27T11:11:00Z", amount: 89.9, customer: null, channel: "Mercado Livre", marketplace: true },
+      { id: "mp-2", code: "200002", at: "2026-11-27T14:30:00Z", amount: 59.9, customer: null, channel: "Mercado Livre", marketplace: true },
+    ],
+  );
+  assert.equal(day.total, 437.8);
+  assert.equal(day.orders, 3);
+  assert.deepEqual(day.byChannel.map((c) => [c.channel, c.orders]), [["Consumidor final", 1], ["Mercado Livre", 2]]);
+  assert.deepEqual(day.feed.map((s) => s.code), ["200002", "B-1", "200001"]);
 });
