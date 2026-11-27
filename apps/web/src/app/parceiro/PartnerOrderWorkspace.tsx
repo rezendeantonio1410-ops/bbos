@@ -892,8 +892,16 @@ export function PartnerOrderWorkspace({
   }
 
   async function calculateQuote() {
-    if (!customerId || cleanItems.length !== lines.length) {
-      setError("Selecione o cliente e preencha todos os produtos.");
+    // Linha de produto vazia é ignorada; só bloqueia produto escolhido sem quantidade.
+    const problem = !customerId
+      ? "Selecione o cliente do pedido."
+      : !cleanItems.length
+        ? "Escolha ao menos um produto e a quantidade."
+        : lines.some((line) => line.productVariantId && !(line.quantity > 0))
+          ? "Informe a quantidade de todos os produtos escolhidos."
+          : "";
+    if (problem) {
+      setError(problem);
       return;
     }
     setBusy(true);
@@ -2094,6 +2102,13 @@ export function PartnerOrderWorkspace({
                   : ""
               }`}
             >
+              {/* O aviso do topo da página fica escondido atrás da janela no celular. */}
+              {error && (
+                <p role="alert" className="flex w-full items-start justify-between gap-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-800">
+                  <span>{error}</span>
+                  <button type="button" onClick={() => setError("")} aria-label="Fechar aviso"><X size={14} /></button>
+                </p>
+              )}
               {isDistributor && (
                 <p
                   className={`w-full text-xs font-semibold sm:mr-auto sm:w-auto ${
