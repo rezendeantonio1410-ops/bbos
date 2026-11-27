@@ -410,10 +410,16 @@ function NewOrderWizard({
     void loadProductCatalog().then(({ products }) => {
       const eligible = products.filter(isProductionProfile);
       if (!eligible.length) return;
-      const first = eligible[0]!;
+      // Vindo de um pedido: /producao?nova=1&produto=<café>&kg=<verde>
+      const params = new URLSearchParams(window.location.search);
+      const wanted = eligible.find((item) => item.id === params.get("produto"));
+      const first = wanted ?? eligible[0]!;
       setCatalog(products);
       setLine(first.line);
       setProductId(first.id);
+      const wantedKg = Number(params.get("kg"));
+      if (wanted && Number.isFinite(wantedKg) && wantedKg > 0)
+        setQuantity(Math.ceil(wantedKg));
     });
   }, []);
   const [quantity, setQuantity] = useState(240);
@@ -2468,11 +2474,16 @@ export default function ProductionPage() {
     };
   }, [orders]);
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
     void fetchProductionOrders()
-      .then(setOrders)
+      .then((loaded) => {
+        setOrders(loaded);
+        const opId = params.get("op");
+        const found = opId ? loaded.find((item) => item.id === opId) : null;
+        if (found) setSelected(found);
+      })
       .catch(() => setOrders([]));
-    if (new URLSearchParams(window.location.search).get("nova") === "1")
-      setWizard(true);
+    if (params.get("nova") === "1") setWizard(true);
   }, []);
   const cards = useMemo(
     () => [

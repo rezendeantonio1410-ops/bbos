@@ -47,6 +47,7 @@ import {
 import { orderPaymentDue } from "@/lib/order-payment-due";
 import { deliveryDaysLate, formatDeliveryDate } from "@/lib/delivery-date";
 import { DirectShipmentCard } from "@/components/direct-shipment-card";
+import { OrderPackagingStep } from "@/components/order-packaging-step";
 import { directShipmentStatus, type DirectShipmentSummary } from "@/lib/direct-shipment";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
@@ -5259,7 +5260,7 @@ function OrderDrawer({
                                 : order.status === "RESERVED"
                                   ? "O estoque está reservado. Inicie a separação física do pedido."
                                   : order.status === "IN_PRODUCTION"
-                                    ? "O café torrado a granel está reservado por linha e perfil. O pedido aguarda a embalagem definida na venda."
+                                    ? "Aguardando embalagem. Veja abaixo o que falta para cada café."
                                     : order.status === "PICKING"
                                       ? "Confirme que a quantidade separada corresponde à quantidade reservada."
                                       : order.status === "READY_TO_SHIP" &&
@@ -5384,6 +5385,13 @@ function OrderDrawer({
                     </button>
                   )}
                 </div>
+                {order.status === "IN_PRODUCTION" && (
+                  <OrderPackagingStep
+                    orderId={order.id}
+                    canOperate={canOperate}
+                    onDone={onChanged}
+                  />
+                )}
                 {canFinalizeDelivery && (
                   <p className="mt-3 text-[10px] text-stone-500">
                     A confirmação de retirada ou entrega grava data e usuário
