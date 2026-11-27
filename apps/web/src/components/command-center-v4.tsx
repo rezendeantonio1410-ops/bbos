@@ -10,11 +10,18 @@ import {
   FlaskConical,
   ReceiptText,
   Truck,
+  Check,
+  Clock3,
+  Trophy,
+  UsersRound,
+  TrendingUp,
+  Store,
   type LucideIcon,
 } from "lucide-react";
 import type { CashFlowLine } from "@/lib/finance-cashflow";
 import { greenCoverageDays, monthName, receivableSnapshot, salesPace, type BriefPart, type SalesGeo } from "@/lib/command-center";
 import { roastPace } from "@/lib/roast-pace";
+import { goalProgress, parseGoalInput, weekWins, type CommandInsights, type SnoozeAction } from "@/lib/command-center-v6";
 
 /**
  * Central de comando (proposta aprovada em 26/11), em três perguntas:
@@ -49,18 +56,37 @@ export type CenterHome = {
   greenInboundKg?: number;
 };
 
-export type CenterTask = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string; why?: string };
-export type CashView = { known: boolean; balance: number; bufferDays: number | null; worst: { date: string; balance: number } | null; minimum: number };
-export type TimelineItem = { key: string; date: string; label: string; amount: number | null; note?: string; alert?: boolean };
+export type CenterTask = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string; why?: string; repeatedDays?: number };
+export type CashView = { known: boolean; balance: number; bufferDays: number | null; fixedBufferDays?: number | null; worst: { date: string; balance: number } | null; minimum: number };
+export type TimelineItem = { key: string; date: string; label: string; amount: number | null; note?: string; alert?: boolean; warn?: boolean };
 
 export function CommandCenterV4({
   home, greeting, firstName, summary, tasks, greenTotal, greenReserved, greenFree, cashLines, financeReady, geo, newMenu, brief, cashView, timeline,
+  onSnooze, onUndoSnooze, insights, onSaveGoal, freshness,
 }: {
   home: CenterHome; greeting: string; firstName: string; summary: string; tasks: CenterTask[];
   greenTotal: number; greenReserved: number; greenFree: number; cashLines: CashFlowLine[];
   financeReady: boolean; geo: SalesGeo | null; newMenu: React.ReactNode;
   brief: BriefPart[]; cashView: CashView | null; timeline: TimelineItem[];
+  onSnooze?: (task: CenterTask, action: SnoozeAction) => Promise<boolean>;
+  onUndoSnooze?: (task: CenterTask) => Promise<void>;
+  insights?: CommandInsights | null;
+  onSaveGoal?: (month: string, salesTarget: number | null) => Promise<string | null>;
+  freshness?: string;
 }) {
+  const [undo, setUndo] = React.useState<{ task: CenterTask; text: string } | null>(null);
+  React.useEffect(() => {
+    if (!undo) return;
+    const timer = window.setTimeout(() => setUndo(null), 8000);
+    return () => window.clearTimeout(timer);
+  }, [undo]);
+  const act = async (task: CenterTask, action: SnoozeAction) => {
+    if (!onSnooze) return;
+    const ok = await onSnooze(task, action);
+    setUndo(ok
+      ? { task, text: action === "DONE" ? "Marcada como feita" : action === "TOMORROW" ? "Volta amanhã às 6h" : "Volta em 7 dias" }
+      : { task, text: "Não foi possível adiar. Tente de novo." });
+  };
   const today = new Date();
   const pace = salesPace(home.salesMonth, today);
   const roast = roastPace(home.productionActualKg, home.productionPlannedKg);
@@ -69,6 +95,14 @@ export function CommandCenterV4({
   const coverage = greenCoverageDays(greenFree, home.productionPlannedKg, today);
   const finishedFree = Math.max(0, home.finishedGoodsUnits - home.finishedGoodsReserved);
   const dateLabel = today.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const goal = goalProgress(home.salesMonth, insights?.goal.salesTarget ?? null, pace.projection, pace.daysLeft);
+  const wins = weekWins({
+    insights: insights ?? null,
+    growthPercent: geo?.growthPercent ?? null,
+    previousMonthName: monthName(today, -1),
+    goal,
+    roastDone: home.productionPlannedKg > 0 && home.productionActualKg >= home.productionPlannedKg,
+  });
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-4 pb-24 sm:pb-20">
@@ -78,6 +112,7 @@ export function CommandCenterV4({
           <p className="mt-0.5 text-sm text-[var(--bbos-text-secondary)] first-letter:uppercase">
             {dateLabel} · {pace.daysLeft > 0 ? `${pace.daysLeft} ${pace.daysLeft === 1 ? "dia" : "dias"} para fechar o mês · ` : "último dia do mês · "}{summary}
           </p>
+          {freshness && <p className="mt-1 inline-flex items-center gap-1 rounded-full bg-[var(--bbos-surface-subtle)] px-2 py-0.5 text-[11.5px] font-medium text-[var(--bbos-text-secondary)]" title="De quando são os números desta tela"><Clock3 size={12} aria-hidden /> {freshness}</p>}
         </div>
         {newMenu}
       </section>
@@ -108,6 +143,7 @@ export function CommandCenterV4({
             {geo && geo.previousRevenue > 0 ? `vs. ${brl.format(geo.previousRevenue)} em ${monthName(today, -1).slice(0, 3)}. até o dia ${pace.day} · ` : `hoje ${brl.format(home.salesToday)} · `}
             ritmo {brl.format(pace.perDay)}/dia → <b className="text-[var(--bbos-text-primary)]">projeção {brl.format(pace.projection)}</b>
           </p>
+          <SalesGoal goal={goal} insights={insights ?? null} onSave={onSaveGoal} />
           <Link href="/vendas" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">Ver vendas →</Link>
         </div>
 
@@ -162,6 +198,12 @@ export function CommandCenterV4({
             {tasks.length > 0 && <span className="rounded-full bg-[var(--bbos-text-primary)] px-2 text-xs font-semibold text-white">{tasks.length}</span>}
             <span className="ml-auto text-xs font-normal text-[var(--bbos-text-secondary)]">por impacto no caixa e no cliente</span>
           </h2>
+          {undo && (
+            <p role="status" className="my-2 flex items-center justify-between gap-2 rounded-lg bg-[var(--bbos-surface-subtle)] px-3 py-2 text-[13px]">
+              <span><b>{undo.task.title}</b> · {undo.text}</span>
+              {onUndoSnooze && !undo.text.startsWith("Não") && <button type="button" onClick={() => { void onUndoSnooze(undo.task); setUndo(null); }} className="font-bold text-[var(--bbos-coffee-green)] underline underline-offset-2">Desfazer</button>}
+            </p>
+          )}
           {tasks.length === 0 ? <p className="py-4 text-sm text-[var(--bbos-text-secondary)]">Nada pendente. Bom trabalho.</p> : (
             <ul className="divide-y divide-[#eef1ed]">
               {tasks.map((task, index) => {
@@ -175,10 +217,20 @@ export function CommandCenterV4({
                       <p className="text-[15px] font-semibold">{task.title}</p>
                       <p className="text-[12.5px] text-[var(--bbos-text-secondary)]">{task.detail}</p>
                       {task.why && <p className="mt-0.5 text-[12px] font-semibold" style={{ color: task.tone === "critical" ? GREEN : "var(--bbos-text-secondary)" }}>{task.why}</p>}
+                      {(task.repeatedDays ?? 0) >= 7 && <p className="mt-0.5 text-[11.5px] text-[var(--bbos-text-secondary)]">aparece há {task.repeatedDays} dias · resolva ou adie</p>}
                     </div>
-                    <Link href={task.href} className={`col-start-3 inline-flex min-h-10 items-center justify-center justify-self-start whitespace-nowrap rounded-xl px-3.5 text-[13px] font-bold sm:col-start-4 ${index === 0 ? "bg-[var(--bbos-action-primary)] text-white hover:bg-[var(--bbos-action-primary-hover)]" : "border border-[var(--bbos-border)] bg-white hover:bg-[var(--bbos-surface-subtle)]"}`}>
-                      {task.action}
-                    </Link>
+                    <div className="col-start-3 flex flex-wrap items-center gap-1.5 justify-self-start sm:col-start-4 sm:justify-self-end">
+                      <Link href={task.href} className={`inline-flex min-h-10 items-center justify-center whitespace-nowrap rounded-xl px-3.5 text-[13px] font-bold ${index === 0 ? "bg-[var(--bbos-action-primary)] text-white hover:bg-[var(--bbos-action-primary-hover)]" : "border border-[var(--bbos-border)] bg-white hover:bg-[var(--bbos-surface-subtle)]"}`}>
+                        {task.action}
+                      </Link>
+                      {onSnooze && (
+                        <span className="inline-flex overflow-hidden rounded-xl border border-[var(--bbos-border)] text-[12px] font-semibold text-[var(--bbos-text-secondary)]">
+                          <button type="button" onClick={() => act(task, "DONE")} title="Já resolvi: some por 30 dias (volta se a situação mudar)" className="inline-flex min-h-10 items-center gap-1 px-2.5 hover:bg-[var(--bbos-surface-subtle)]"><Check size={13} aria-hidden />Feito</button>
+                          <button type="button" onClick={() => act(task, "TOMORROW")} title="Lembrar amanhã às 6h" className="min-h-10 border-l border-[var(--bbos-border)] px-2.5 hover:bg-[var(--bbos-surface-subtle)]">Amanhã</button>
+                          <button type="button" onClick={() => act(task, "WEEK")} title="Adiar 7 dias" className="min-h-10 border-l border-[var(--bbos-border)] px-2.5 hover:bg-[var(--bbos-surface-subtle)]">7 dias</button>
+                        </span>
+                      )}
+                    </div>
                   </li>
                 );
               })}
@@ -188,6 +240,15 @@ export function CommandCenterV4({
 
         <Timeline items={timeline} />
       </div>
+
+      {wins.length > 0 && (
+        <section aria-label="Vitórias da semana" className={`${card} flex flex-wrap items-center gap-2 p-3.5`}>
+          <span className="inline-flex items-center gap-1.5 pr-1 text-[13.5px] font-semibold"><Trophy size={16} className="text-[var(--bbos-coffee-green)]" aria-hidden />Vitórias da semana</span>
+          {wins.map((win) => <span key={win} className="rounded-full bg-[var(--bbos-success-soft,#e6f1ec)] px-3 py-1 text-[12.5px] font-semibold text-[var(--bbos-success,#1f6b4f)] motion-safe:animate-[fadeIn_.4s_ease]">{win}</span>)}
+        </section>
+      )}
+
+      {insights && <GrowthRow insights={insights} />}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <section aria-labelledby="stock-title" className={`${card} p-4 sm:p-5`}>
@@ -322,7 +383,7 @@ function CashCard({ view }: { view: CashView | null }) {
         <>
           <p className="mt-1.5 whitespace-nowrap text-[26px] font-bold tabular-nums">{brl.format(view.balance)}</p>
           <p className="text-[12.5px] text-[var(--bbos-text-secondary)]">
-            {view.bufferDays !== null && <><b style={{ color: view.bufferDays < 15 ? AMBER : GREEN }}>~{view.bufferDays} {view.bufferDays === 1 ? "dia" : "dias"} de caixa</b> · </>}
+            {view.bufferDays !== null && <><b style={{ color: view.bufferDays < 15 ? AMBER : GREEN }} title="Saldo ÷ média de tudo que saiu nos últimos 30 dias, incluindo compras de café">~{view.bufferDays} {view.bufferDays === 1 ? "dia" : "dias"} de caixa</b>{view.fixedBufferDays != null && <> (<b style={{ color: view.fixedBufferDays < 15 ? AMBER : GREEN }} title="Saldo ÷ despesas fixas previstas">~{view.fixedBufferDays} só com fixas</b>)</>} · </>}
             {worst ? <>pior dia: <b style={{ color: worst.balance < view.minimum ? RED : GREEN }}>{brl.format(worst.balance)} em {day(worst.date)}</b></> : "sem saídas previstas"}
           </p>
           <div aria-hidden className="relative mt-3 h-3 rounded bg-[var(--bbos-surface-subtle)]">
@@ -357,7 +418,7 @@ function Timeline({ items }: { items: TimelineItem[] }) {
           {items.map((item) => (
             <li key={item.key} className={`grid grid-cols-[62px_1fr_auto] items-baseline gap-2 border-t border-[#eef1ed] px-1.5 py-2 text-[13px] first:border-0 ${item.alert ? "rounded-lg border-0 bg-[#fdecea]" : ""}`}>
               <span className="font-bold" style={item.alert ? { color: RED } : undefined}>{day(item.date)}</span>
-              <span className="min-w-0">{item.label}{item.note && <span className="text-[var(--bbos-text-secondary)]"> · {item.note}</span>}</span>
+              <span className="min-w-0">{item.label}{item.note && <span className={item.warn ? "font-semibold text-[var(--bbos-warning)]" : "text-[var(--bbos-text-secondary)]"}> · {item.note}</span>}</span>
               <span className="font-bold tabular-nums" style={{ color: item.amount === null ? "var(--bbos-text-secondary)" : item.amount > 0 ? GREEN : RED }}>
                 {item.amount === null ? "" : `${item.amount > 0 ? "+" : "−"}${num.format(Math.abs(item.amount))}`}
               </span>
@@ -367,5 +428,119 @@ function Timeline({ items }: { items: TimelineItem[] }) {
       )}
       <Link href="/financeiro/fluxo-caixa" className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)]">Ver fluxo de caixa →</Link>
     </section>
+  );
+}
+
+
+/** Meta do mês e margem, dentro do card de vendas (Locke e Latham; efeito reta final). */
+function SalesGoal({ goal, insights, onSave }: { goal: ReturnType<typeof goalProgress>; insights: CommandInsights | null; onSave?: (month: string, salesTarget: number | null) => Promise<string | null> }) {
+  const [editing, setEditing] = React.useState<string | null>(null);
+  const [value, setValue] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  if (!insights) return null;
+  const margin = insights.margin;
+  const next = insights.nextGoal;
+  const monthLabel = (key: string) => new Date(`${key}-15T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long" });
+  const open = (month: string, current: number | null) => { setEditing(month); setValue(current ? String(current).replace(".", ",") : ""); setError(""); };
+  const save = async () => {
+    if (!onSave || !editing) return;
+    setBusy(true);
+    const message = await onSave(editing, parseGoalInput(value));
+    setBusy(false);
+    if (message) setError(message); else setEditing(null);
+  };
+  return (
+    <div className="mt-2 space-y-1.5 border-t border-[#eef1ed] pt-2 text-[12.5px]">
+      <p className="text-[var(--bbos-text-secondary)]">
+        {margin.marginPercent !== null
+          ? <>margem <b className="text-[var(--bbos-text-primary)]">{num.format(margin.marginPercent)}%</b>{margin.marginAmount !== null && <> · ~{brl.format(margin.marginAmount)}</>}{margin.coveragePercent < 95 && <> · custo de {margin.coveragePercent}% das vendas</>}</>
+          : <>margem: <Link href="/custos" className="font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">cadastre o custo dos produtos</Link></>}
+      </p>
+      {goal ? (
+        <div>
+          <div aria-label={`Meta: ${goal.percent}%`} className="relative h-2.5 rounded bg-[var(--bbos-surface-subtle)]">
+            <span className="absolute inset-y-0 left-0 rounded transition-[width] duration-700 ease-out" style={{ width: `${goal.percent}%`, background: goal.reached || goal.onTrack ? GREEN : AMBER }} />
+          </div>
+          <p className="mt-1 text-[var(--bbos-text-secondary)]">
+            {goal.reached ? <b style={{ color: GREEN }}>meta de {brl.format(goal.target)} batida</b> : <>{goal.percent}% da meta de {brl.format(goal.target)} · faltam <b className="text-[var(--bbos-text-primary)]">{brl.format(goal.missing)}</b>{goal.perDay > 0 && goal.missing > 0 ? ` (${brl.format(goal.perDay)}/dia)` : ""}</>}
+            {" "}<button type="button" onClick={() => open(insights.goal.month, goal.target)} className="font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">alterar</button>
+          </p>
+        </div>
+      ) : (
+        <p><button type="button" onClick={() => open(insights.goal.month, null)} className="font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">Definir meta de {monthLabel(insights.goal.month)}</button></p>
+      )}
+      <p className="text-[var(--bbos-text-secondary)]">
+        {next.salesTarget ? <>meta de {monthLabel(next.month)}: {brl.format(next.salesTarget)} · </> : null}
+        <button type="button" onClick={() => open(next.month, next.salesTarget)} className="font-semibold text-[var(--bbos-coffee-green)] underline underline-offset-2">{next.salesTarget ? "alterar" : `Definir meta de ${monthLabel(next.month)}`}</button>
+      </p>
+      {editing && (
+        <form className="flex flex-wrap items-center gap-1.5" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+          <label htmlFor="goal-input" className="sr-only">Meta de vendas de {monthLabel(editing)} em reais</label>
+          <input id="goal-input" autoFocus inputMode="decimal" placeholder="Ex.: 30.000" value={value} onChange={(event) => setValue(event.target.value)} className="min-h-9 w-32 rounded-lg border border-[var(--bbos-border)] px-2 text-[13px]" />
+          <button type="submit" disabled={busy} className="min-h-9 rounded-lg bg-[var(--bbos-action-primary)] px-3 text-[12.5px] font-bold text-white disabled:opacity-60">Salvar</button>
+          <button type="button" onClick={() => setEditing(null)} className="min-h-9 rounded-lg border border-[var(--bbos-border)] px-3 text-[12.5px]">Cancelar</button>
+          {error && <span role="alert" className="w-full text-[12px] text-[var(--bbos-danger)]">{error}</span>}
+        </form>
+      )}
+    </div>
+  );
+}
+
+/** Crescimento: funil de prospecção, saúde da carteira e vendas por canal (Balanced Scorecard, Salesforce). */
+function GrowthRow({ insights }: { insights: CommandInsights }) {
+  const { growth, customers, channels } = insights;
+  const totalChannels = channels.reduce((sum, row) => sum + row.revenue, 0);
+  const funnel = [
+    { label: "Prospects ativos", value: growth.activeProspects },
+    { label: "Em degustação ou proposta", value: growth.proposals },
+    { label: "Visitas no mês", value: growth.visitsMonth },
+    { label: "Clientes novos no mês", value: growth.newCustomersMonth },
+  ];
+  const max = Math.max(1, ...funnel.map((step) => step.value));
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      <section aria-labelledby="growth-title" className={`${card} p-4 sm:p-5`}>
+        <h2 id="growth-title" className="mb-2 flex items-center gap-2 text-[16.5px] font-semibold"><TrendingUp size={17} className="text-[var(--bbos-coffee-green)]" aria-hidden />Crescimento<Link href="/prospeccao" className="ml-auto text-[13px] font-semibold text-[var(--bbos-coffee-green)]">Prospecção →</Link></h2>
+        <ul className="space-y-1.5">
+          {funnel.map((step) => (
+            <li key={step.label} className="relative overflow-hidden rounded-lg bg-[var(--bbos-surface-subtle)] px-3 py-1.5 text-[13px]">
+              <span aria-hidden className="absolute inset-y-0 left-0 bg-[var(--bbos-success-soft,#e6f1ec)] transition-[width] duration-700 ease-out" style={{ width: `${Math.max(step.value ? 8 : 0, (step.value / max) * 100)}%` }} />
+              <span className="relative flex justify-between gap-2"><span>{step.label}</span><b className="tabular-nums">{num.format(step.value)}</b></span>
+            </li>
+          ))}
+        </ul>
+        <p className="mt-2 text-[12px] text-[var(--bbos-text-secondary)]">
+          {growth.newCustomerNames.length ? `Novos: ${growth.newCustomerNames.join(", ")}` : growth.activeProspects > 0 && growth.visitsMonth === 0 ? `${num.format(growth.activeProspects)} prospects esperando a primeira visita` : "Registre visitas para ver o funil andar"}
+        </p>
+      </section>
+
+      <section aria-labelledby="customers-title" className={`${card} p-4 sm:p-5`}>
+        <h2 id="customers-title" className="mb-2 flex items-center gap-2 text-[16.5px] font-semibold"><UsersRound size={17} className="text-[var(--bbos-coffee-green)]" aria-hidden />Clientes<Link href="/clientes" className="ml-auto text-[13px] font-semibold text-[var(--bbos-coffee-green)]">Clientes →</Link></h2>
+        <dl className="space-y-1.5 text-[13.5px]">
+          <div className="flex justify-between gap-2"><dt>Recompra no ritmo</dt><dd className="font-bold tabular-nums">{customers.onTimeRate === null ? "—" : `${customers.onTimeRate}%`}<span className="font-normal text-[var(--bbos-text-secondary)]"> de {customers.recurring} recorrentes</span></dd></div>
+          <div className="flex justify-between gap-2"><dt>Passaram do ritmo</dt><dd className="font-bold tabular-nums" style={customers.lapsed.length ? { color: AMBER } : undefined}>{customers.lapsed.length}</dd></div>
+          {customers.topCustomer && <div className="flex justify-between gap-2"><dt>Maior cliente do mês</dt><dd className="text-right"><b className="tabular-nums" style={customers.topCustomer.share >= 30 ? { color: AMBER } : undefined}>{customers.topCustomer.share}%</b> <span className="text-[var(--bbos-text-secondary)]">{customers.topCustomer.name}</span></dd></div>}
+        </dl>
+        <p className="mt-2 text-[12px] text-[var(--bbos-text-secondary)]">
+          {customers.lapsed[0] ? `${customers.lapsed[0].name}: ${customers.lapsed[0].daysSince} dias sem pedido (costuma ${customers.lapsed[0].avgIntervalDays})` : customers.recurring ? "Todos os recorrentes comprando no ritmo" : "Recorrente = 3 ou mais pedidos no ano"}
+          {customers.topCustomer && customers.topCustomer.share >= 30 ? " · venda concentrada num cliente" : ""}
+        </p>
+      </section>
+
+      <section aria-labelledby="channels-title" className={`${card} p-4 sm:p-5`}>
+        <h2 id="channels-title" className="mb-2 flex items-center gap-2 text-[16.5px] font-semibold"><Store size={17} className="text-[var(--bbos-coffee-green)]" aria-hidden />Vendas por canal<Link href="/vendas" className="ml-auto text-[13px] font-semibold text-[var(--bbos-coffee-green)]">Vendas →</Link></h2>
+        {channels.length === 0 ? <p className="py-2 text-sm text-[var(--bbos-text-secondary)]">Sem vendas no mês.</p> : (
+          <ul className="space-y-2">
+            {channels.slice(0, 5).map((row) => (
+              <li key={row.name} className="text-[13px]">
+                <div className="flex justify-between gap-2"><span>{row.name}</span><b className="tabular-nums">{brl.format(row.revenue)}</b></div>
+                <div aria-hidden className="mt-1 h-1.5 rounded bg-[var(--bbos-surface-subtle)]"><span className="block h-full rounded transition-[width] duration-700 ease-out" style={{ width: `${totalChannels ? (row.revenue / totalChannels) * 100 : 0}%`, background: GREEN }} /></div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
   );
 }

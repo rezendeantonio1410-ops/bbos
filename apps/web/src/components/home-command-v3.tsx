@@ -24,7 +24,18 @@ import { roastPace } from "@/lib/roast-pace";
 import { buildCashFlowLines, type CashFlowLine } from "@/lib/finance-cashflow";
 import { buildBrief, greenCoverageDays, greenStock, payableSnapshot, salesPace, type SalesGeo } from "@/lib/command-center";
 import { buildForecast, cashBufferDays, paidLast30Days, plannedLabel, type RecurringExpense } from "@/lib/cash-forecast";
-import type { CashView, TimelineItem } from "./command-center-v4";
+import type { CashView, CenterTask, TimelineItem } from "./command-center-v4";
+import {
+  delayFor,
+  fixedBufferDays,
+  orderTasks,
+  repeatedDays,
+  saneBufferDays,
+  taskSnoozeKey,
+  withoutSnoozed,
+  type CommandInsights,
+  type SnoozeAction,
+} from "@/lib/command-center-v6";
 import { CommandCenterV4 } from "./command-center-v4";
 
 const money = new Intl.NumberFormat("pt-BR", {
@@ -107,6 +118,17 @@ export function HomeCommandV3() {
   const [finance, setFinance] = React.useState<FinanceSnapshot>(null);
   const [geo, setGeo] = React.useState<SalesGeo | null>(null);
   const [samples, setSamples] = React.useState<ExportSample[]>([]);
+  const [insights, setInsights] = React.useState<CommandInsights | null>(null);
+
+  const loadInsights = React.useCallback(async () => {
+    try {
+      const response = await fetch(`${getApiBaseUrl()}/command-center/insights`, { credentials: "include", cache: "no-store" });
+      if (response.ok) setInsights((await response.json()) as CommandInsights);
+    } catch {
+      /* a Central funciona sem os dados novos */
+    }
+  }, []);
+  React.useEffect(() => { void loadInsights(); }, [loadInsights]);
 
   React.useEffect(() => {
     const apiRoot = getApiBaseUrl();
@@ -238,6 +260,8 @@ export function HomeCommandV3() {
       finance={finance}
       geo={geo}
       samples={samples}
+      insights={insights}
+      reloadInsights={loadInsights}
     />
   );
 }
@@ -247,7 +271,7 @@ type FinanceSnapshot = {
   cash: number | null; overdue: number; cashStarted: boolean; lines: CashFlowLine[];
   cashStartDate?: string | null; minimum?: number; recurring?: RecurringExpense[]; paid30?: number;
 } | null;
-type Task = { key: string; tone: "critical" | "attention" | "ok"; title: string; detail: string; href: string; action: string; why?: string };
+type Task = CenterTask;
 
 const CAUSE: Record<string, string> = {
   Aluguel: "o aluguel", Seguros: "o seguro", "Energia elétrica": "a conta de luz", Água: "a conta de água",
@@ -284,13 +308,58 @@ const brlTask = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "B
  */
 function CommandCenter({
   home, greeting, firstName, decisions, state,
-  green, finance, geo, samples,
+  green, finance, geo, samples, insights, reloadInsights,
 }: {
   home: HomeData; greeting: string; firstName: string;
   decisions: HomeData["alerts"]; state: EvidenceState;
   green: { total: number; reserved: number; free: number };
   finance: FinanceSnapshot; geo: SalesGeo | null; samples: ExportSample[];
+  insights: CommandInsights | null; reloadInsights: () => Promise<void>;
 }) {
+  // Tarefas adiadas (Feito / Amanhã / 7 dias): vêm do servidor e somem na hora ao clicar.
+  const [snoozed, setSnoozed] = React.useState<Set<string>>(new Set());
+  React.useEffect(() => {
+    if (insights) setSnoozed(new Set(insights.snoozes.map((item) => item.taskKey)));
+  }, [insights]);
+  // Desde quando cada tarefa aparece (neste navegador), para o alerta repetido perder força.
+  const [firstSeen, setFirstSeen] = React.useState<Record<string, string>>({});
+  React.useEffect(() => {
+    try {
+      setFirstSeen(JSON.parse(window.localStorage.getItem("bbos.center.firstSeen") || "{}"));
+    } catch {
+      /* sem histórico local, nada se repete */
+    }
+  }, []);
+
+  const snooze = async (task: CenterTask, action: SnoozeAction) => {
+    const key = taskSnoozeKey(task);
+    setSnoozed((current) => new Set(current).add(key));
+    const response = await fetch(`${getApiBaseUrl()}/command-center/tasks/snooze`, {
+      method: "POST", credentials: "include", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ taskKey: key, action }),
+    }).catch(() => null);
+    if (!response?.ok) {
+      setSnoozed((current) => { const next = new Set(current); next.delete(key); return next; });
+      return false;
+    }
+    return true;
+  };
+  const undoSnooze = async (task: CenterTask) => {
+    const key = taskSnoozeKey(task);
+    setSnoozed((current) => { const next = new Set(current); next.delete(key); return next; });
+    await fetch(`${getApiBaseUrl()}/command-center/tasks/snooze/${encodeURIComponent(key)}`, { method: "DELETE", credentials: "include" }).catch(() => null);
+  };
+  const saveGoal = async (month: string, salesTarget: number | null) => {
+    const response = await fetch(`${getApiBaseUrl()}/command-center/goal`, {
+      method: "PUT", credentials: "include", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ month, salesTarget }),
+    }).catch(() => null);
+    if (!response) return "Sem conexão. Tente de novo.";
+    if (response.status === 403) return "Só a liderança (administrador ou executivo) define a meta.";
+    if (!response.ok) return ((await response.json().catch(() => ({}))) as { message?: string }).message ?? "Não foi possível salvar a meta.";
+    await reloadInsights();
+    return null;
+  };
   const pace = roastPace(home.productionActualKg, home.productionPlannedKg);
   const minimum = finance?.minimum ?? 5000;
   // Previsão do caixa (mesma do Fluxo de caixa): saldo + títulos + despesas fixas.
@@ -305,7 +374,8 @@ function CommandCenter({
   const cashView: CashView | null = finance && forecast ? {
     known,
     balance: finance.cash ?? 0,
-    bufferDays: known ? cashBufferDays(finance.cash ?? 0, finance.paid30 ?? 0) : null,
+    bufferDays: known ? saneBufferDays(cashBufferDays(finance.cash ?? 0, finance.paid30 ?? 0)) : null,
+    fixedBufferDays: known ? fixedBufferDays(finance.cash ?? 0, finance.recurring ?? []) : null,
     worst: known ? { date: forecast.worst.date, balance: forecast.worst.balance } : null,
     minimum,
   } : null;
@@ -351,6 +421,18 @@ function CommandCenter({
     href: "/exportacoes/amostras",
     action: "Ver amostras",
   }] : [];
+  const lapsed = insights?.customers.lapsed ?? [];
+  const lapsedTask: Task[] = lapsed.length ? [{
+    key: "lapsed",
+    tone: "attention",
+    title: lapsed.length === 1 ? `Falar com ${lapsed[0]!.name}` : `Falar com ${lapsed.length} clientes sem recompra`,
+    detail: lapsed.length === 1
+      ? `${lapsed[0]!.daysSince} dias sem pedido · costuma comprar a cada ${lapsed[0]!.avgIntervalDays} dias`
+      : lapsed.slice(0, 3).map((c) => `${c.name} · ${c.daysSince} dias (costuma ${c.avgIntervalDays})`).join(" · "),
+    why: "Cliente recorrente que passou do ritmo de compra costuma ser recuperado com uma ligação",
+    href: "/clientes",
+    action: "Ver clientes",
+  }] : [];
   const tasks: Task[] = [
     ...overdueTask,
     ...statementTask,
@@ -376,6 +458,7 @@ function CommandCenter({
         }]
       : []),
     ...sampleTask,
+    ...lapsedTask,
     ...(pace.behindKg >= 10
       ? [{
           key: "roast",
@@ -389,9 +472,19 @@ function CommandCenter({
         }]
       : []),
   ];
-  const order = { critical: 0, attention: 1, ok: 2 } as const;
-  tasks.sort((a, b) => order[a.tone] - order[b.tone]);
-  tasks.splice(5);
+  const withAge = tasks.map((task) => ({ ...task, repeatedDays: repeatedDays(firstSeen[taskSnoozeKey(task)]) }));
+  const visibleTasks = orderTasks(withoutSnoozed(withAge, snoozed)).slice(0, 5);
+  const seenSignature = tasks.map(taskSnoozeKey).join("\n");
+  React.useEffect(() => {
+    const keys = seenSignature ? seenSignature.split("\n") : [];
+    if (!keys.length) return;
+    const now = new Date().toISOString();
+    const next: Record<string, string> = {};
+    for (const key of keys) next[key] = firstSeen[key] ?? now;
+    if (keys.every((key) => firstSeen[key]) && Object.keys(firstSeen).length === keys.length) return;
+    setFirstSeen(next);
+    try { window.localStorage.setItem("bbos.center.firstSeen", JSON.stringify(next)); } catch { /* opcional */ }
+  }, [seenSignature, firstSeen]);
 
   // Próximos 7 dias: dinheiro (previsão) e operação; o pior dia entra em destaque.
   const timeline: TimelineItem[] = [];
@@ -399,7 +492,10 @@ function CommandCenter({
     for (const day of forecast.days.slice(0, 8)) {
       const launched = day.events.filter((e) => e.kind === "lancado");
       const planned = day.events.filter((e) => e.kind === "previsto");
-      for (const e of launched) timeline.push({ key: e.id, date: day.date, label: e.amount > 0 ? `${e.label} paga` : e.label, amount: e.amount });
+      for (const e of launched) {
+        const delay = e.amount > 0 ? delayFor(e.label, insights?.payerDelays) : null;
+        timeline.push({ key: e.id, date: day.date, label: e.amount > 0 ? `${e.label} paga` : e.label, amount: e.amount, note: delay ? `costuma atrasar ${delay} dias` : undefined, warn: Boolean(delay) });
+      }
       if (planned.length)
         timeline.push({ key: `p${day.date}`, date: day.date, label: plannedLabel(planned), note: planned.every((e) => e.id.startsWith("tax-")) ? "imposto estimado" : "previsto", amount: planned.reduce((sum, e) => sum + e.amount, 0) });
     }
@@ -412,13 +508,19 @@ function CommandCenter({
     timeline.sort((a, b) => a.date.localeCompare(b.date));
   }
 
+  // Confiança no número: de quando é o saldo e quando a tela foi montada.
+  const freshness = [
+    finance?.cashStartDate ? `Extrato de ${dayMonth(finance.cashStartDate)}` : finance ? "Sem extrato importado" : null,
+    `dados de ${new Date(insights?.generatedAt ?? Date.now()).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`,
+  ].filter(Boolean).join(" · ");
+
   const summary =
     state === "loading"
       ? "Reunindo a operação de hoje…"
       : state === "unavailable"
         ? "A conexão com os dados está sendo retomada."
-        : tasks.length
-          ? `${tasks.length} ${tasks.length === 1 ? "coisa pede" : "coisas pedem"} você`
+        : visibleTasks.length
+          ? `${visibleTasks.length} ${visibleTasks.length === 1 ? "coisa pede" : "coisas pedem"} você`
           : "Nada pede decisão agora";
   return (
     <CommandCenterV4
@@ -426,7 +528,12 @@ function CommandCenter({
       greeting={greeting}
       firstName={firstName}
       summary={summary}
-      tasks={tasks}
+      tasks={visibleTasks}
+      onSnooze={snooze}
+      onUndoSnooze={undoSnooze}
+      insights={insights}
+      onSaveGoal={saveGoal}
+      freshness={freshness}
       greenTotal={green.total}
       greenReserved={green.reserved}
       greenFree={green.free}

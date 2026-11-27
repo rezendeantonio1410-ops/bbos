@@ -88,6 +88,8 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   SalesOrdersController: CORE,
   // Envio direto do distribuidor (etiqueta do parceiro, postagem pela Bispo).
   DirectShipmentController: CORE,
+  // Central de comando v6: leitura para a equipe; meta do mês só liderança.
+  CommandCenterController: CORE,
   SalesOrderApprovalsController: CORE,
   SalesOrderManualPaymentsController: ["ADMIN"],
   FinanceController: ACCOUNTING_WRITE,
@@ -240,6 +242,12 @@ const HANDLER_ROLE_POLICY: Readonly<
     getRules: OPERATIONS,
     getRulesForLine: OPERATIONS,
     validateSku: OPERATIONS,
+  },
+  CommandCenterController: {
+    insights: CORE,
+    saveGoal: LEADERSHIP,
+    snooze: CORE,
+    unsnooze: CORE,
   },
   DirectShipmentController: {
     list: [...CORE, "ACCOUNTANT"],
