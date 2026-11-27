@@ -194,13 +194,26 @@ export class ProspectsController {
 
   /** Links the prospect to the customer created from it (stage becomes CLIENTE). */
   @Post(":id/convert")
-  async convert(@Param("id") id: string, @Req() request: any, @Body() body: { customerId?: string }) {
+  async convert(@Param("id") id: string, @Req() request: any, @Body() body: { customerId?: string; taxId?: string }) {
     const actor = await this.actor(request);
     await this.findProspect(actor.companyId, id);
-    const customer = await this.db.customer.findFirst({
-      where: { id: String(body.customerId ?? ""), companyId: actor.companyId },
-      select: { id: true },
-    });
+    // Pelo id do cliente recém-criado ou, se o CNPJ já estava cadastrado, pelo CNPJ.
+    const taxId = String(body.taxId ?? "").replace(/[^0-9A-Za-z]/g, "").toUpperCase();
+    const customer = body.customerId
+      ? await this.db.customer.findFirst({
+          where: { id: String(body.customerId), companyId: actor.companyId },
+          select: { id: true },
+        })
+      : taxId.length >= 11
+        ? (
+            (await this.db.$queryRawUnsafe(
+              `SELECT id FROM "Customer" WHERE "companyId"=$1
+                 AND upper(regexp_replace(COALESCE("taxId",''),'[^0-9A-Za-z]','','g'))=$2 LIMIT 1`,
+              actor.companyId,
+              taxId,
+            )) as Array<{ id: string }>
+          )[0] ?? null
+        : null;
     if (!customer) throw new BadRequestException("Cliente não encontrado.");
     await this.db.$executeRawUnsafe(
       `UPDATE "Prospect" SET "customerId"=$3,stage='CLIENTE',"convertedAt"=COALESCE("convertedAt",NOW()),"updatedAt"=NOW()
@@ -209,7 +222,7 @@ export class ProspectsController {
       actor.companyId,
       customer.id,
     );
-    return this.findProspect(actor.companyId, id);
+    return { ...(await this.findProspect(actor.companyId, id)), customerId: customer.id };
   }
 
   /**
