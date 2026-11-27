@@ -58,6 +58,8 @@ jobs:
           cat /tmp/success.log
           grep -q '^BACKUP_VERIFIED:' /tmp/success.log
           grep -q '^REHEARSAL_COPY_READY:' /tmp/success.log
+          # The non-public fixture must participate in the verification, not just restore.
+          grep -q 'tabelas origem=3 copia=3 linhas origem=3 copia=3' /tmp/success.log
           for db in backup_ci rehearsal_ci; do
             test "$(psql -XAt -v ON_ERROR_STOP=1 -d "$db" -c 'SELECT count(*) FROM public.child WHERE id=2 AND parent_id=1')" = 1
             test "$(psql -XAt -v ON_ERROR_STOP=1 -d "$db" -c 'SELECT count(*) FROM fixture.extra WHERE id=3')" = 1
