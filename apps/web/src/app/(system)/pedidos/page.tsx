@@ -5025,12 +5025,13 @@ function OrderDrawer({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <p className="flex items-center gap-2 text-xs font-bold text-violet-950">
-                      <BadgeDollarSign size={16} /> Pagamento direto via Pix
+                      <BadgeDollarSign size={16} /> Aguardando Pix de{" "}
+                      {money.format(manualPix.amount)}
                     </p>
                     <p className="mt-1 text-[10px] leading-4 text-violet-800">
-                      Confirmação manual restrita a José e Suzi no nível
-                      administrativo. Valor em aberto:{" "}
-                      {money.format(manualPix.amount)}.
+                      Não trava o pedido: pode embalar, faturar e enviar
+                      normalmente. Quando o Pix cair na conta, toque em
+                      Confirmar PIX recebido (só administradores).
                     </p>
                   </div>
                   {!manualPixOpen && (
