@@ -245,6 +245,11 @@ const HANDLER_ROLE_POLICY: Readonly<
     getRulesForLine: OPERATIONS,
     validateSku: OPERATIONS,
   },
+  SellerPortfolioController: {
+    portfolio: ["ADMIN", "EXECUTIVE", "SALES"],
+    goals: LEADERSHIP,
+    saveGoal: LEADERSHIP,
+  },
   CommandCenterController: {
     insights: CORE,
     today: CORE,

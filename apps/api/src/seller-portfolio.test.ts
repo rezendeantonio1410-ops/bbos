@@ -52,3 +52,18 @@ test("número de WhatsApp", () => {
   assert.equal(whatsappNumber("+55 43 99999-0000"), "5543999990000");
   assert.equal(whatsappNumber("123"), null);
 });
+
+test("mês do vendedor: R$ e kg contra a meta, com falta por dia", async () => {
+  const { sellerMonth, validateSellerGoal } = await import("./seller-portfolio");
+  const m = sellerMonth({ revenue: 6000, kg: 60, orders: 5, salesTarget: 10000, kgTarget: 100, now: new Date("2026-11-27T15:00:00Z") });
+  assert.equal(m.month, "2026-11");
+  assert.equal(m.daysLeft, 3);
+  assert.equal(m.revenue.percent, 60);
+  assert.equal(m.revenue.missing, 4000);
+  assert.equal(m.kg.perDay, 13.33);
+  assert.equal(m.revenue.onTrack, false);
+  const noGoal = sellerMonth({ revenue: 500, kg: 5, orders: 1, salesTarget: null, kgTarget: null, now: new Date("2026-11-27T15:00:00Z") });
+  assert.equal(noGoal.revenue.target, null);
+  assert.deepEqual(validateSellerGoal({ partnerId: "p", month: "2026-12", salesTarget: "15.000,00", kgTarget: "120" }), { partnerId: "p", month: "2026-12", salesTarget: 15000, kgTarget: 120 });
+  assert.throws(() => validateSellerGoal({ partnerId: "p", month: "2026-13" }), /Mês/);
+});

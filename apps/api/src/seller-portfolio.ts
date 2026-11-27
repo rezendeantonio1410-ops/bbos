@@ -140,3 +140,58 @@ export function whatsappNumber(phone: string | null | undefined) {
   if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) return digits;
   return null;
 }
+
+/** Mês do vendedor: realizado em R$ e kg contra a meta, com projeção e falta por dia. */
+export function sellerMonth(input: {
+  revenue: number;
+  kg: number;
+  orders: number;
+  salesTarget: number | null;
+  kgTarget: number | null;
+  now?: Date;
+}) {
+  const now = input.now ?? new Date();
+  const local = new Date(now.getTime() - 3 * 3_600_000);
+  const day = local.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() + 1, 0)).getUTCDate();
+  const daysLeft = Math.max(0, daysInMonth - day);
+  const track = (done: number, target: number | null) => {
+    const projection = day > 0 ? (done / day) * daysInMonth : done;
+    if (!target || target <= 0) return { done: round(done), target: null, percent: null, projection: round(projection), missing: null, perDay: null, onTrack: null };
+    const missing = Math.max(0, target - done);
+    return {
+      done: round(done),
+      target: round(target),
+      percent: Math.round((done / target) * 100),
+      projection: round(projection),
+      missing: round(missing),
+      perDay: daysLeft > 0 ? round(missing / daysLeft) : round(missing),
+      onTrack: projection >= target,
+    };
+  };
+  return {
+    month: local.toISOString().slice(0, 7),
+    daysLeft,
+    orders: input.orders,
+    revenue: track(input.revenue, input.salesTarget),
+    kg: track(input.kg, input.kgTarget),
+  };
+}
+
+const round = (value: number) => Math.round(value * 100) / 100;
+
+/** Meta do vendedor: AAAA-MM e valores ≥ 0; vazio ou zero remove. */
+export function validateSellerGoal(input: { partnerId?: unknown; month?: unknown; salesTarget?: unknown; kgTarget?: unknown }) {
+  const partnerId = String(input.partnerId ?? "").trim();
+  if (!partnerId) throw new Error("Escolha o vendedor.");
+  const month = String(input.month ?? "").trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error("Mês inválido (use AAAA-MM).");
+  const parse = (value: unknown, label: string) => {
+    const raw = typeof value === "string" ? value.replace(/\./g, "").replace(",", ".").trim() : value;
+    if (raw === null || raw === undefined || raw === "") return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) throw new Error(`Meta de ${label} inválida.`);
+    return n > 0 ? Math.round(n * 1000) / 1000 : null;
+  };
+  return { partnerId, month, salesTarget: parse(input.salesTarget, "vendas (R$)"), kgTarget: parse(input.kgTarget, "volume (kg)") };
+}

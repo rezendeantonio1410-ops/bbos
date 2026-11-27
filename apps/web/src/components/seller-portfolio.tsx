@@ -11,8 +11,10 @@ type PortfolioCustomer = {
   rhythm: number; thermometer: number; lastOrderAt: string | null; revenue90: number; overdueAmount: number;
   lastVisitAt: string | null; nextStep: string;
 };
+type Track = { done: number; target: number | null; percent: number | null; projection: number; missing: number | null; perDay: number | null; onTrack: boolean | null };
 type Portfolio = {
   generatedAt: string;
+  month?: { month: string; daysLeft: number; orders: number; revenue: Track; kg: Track };
   summary: { customers: number; revenue90: number; buyers90: number; overdue: number; overdueCustomers: string[]; withoutVisit: number; newWithoutOrder: string[]; attention: number };
   tasks: Array<{ customerId: string; status: Status; phone: string | null; title: string; detail: string; why: string }>;
   customers: PortfolioCustomer[];
@@ -75,6 +77,7 @@ export function SellerPortfolio() {
   const kpi = "rounded-[18px] border border-stone-200 bg-white p-4";
   return (
     <div id="carteira" className="space-y-4">
+      {data.month && <MonthGoals month={data.month} />}
       <section aria-label="Resumo da carteira" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <div className={kpi}><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-stone-500">Vendido · 90 dias</p><p className="mt-1 text-2xl font-bold tabular-nums">{brl.format(s.revenue90)}</p><p className="text-xs text-stone-500">{s.buyers90} de {s.customers} clientes compraram</p></div>
         <div className={kpi}><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-stone-500">Vencido na carteira</p><p className={`mt-1 text-2xl font-bold tabular-nums ${s.overdue > 0 ? "text-red-700" : ""}`}>{brl.format(s.overdue)}</p><p className="truncate text-xs text-stone-500">{s.overdueCustomers.length ? s.overdueCustomers.join(", ") : "nada vencido"}</p></div>
@@ -144,5 +147,40 @@ export function SellerPortfolio() {
         </div>
       </section>
     </div>
+  );
+}
+
+
+const kgFmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+
+/** Meu mês: vendido em R$ e kg contra a meta definida pela liderança. */
+function MonthGoals({ month }: { month: NonNullable<Portfolio["month"]> }) {
+  const name = new Date(`${month.month}-15T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long", timeZone: "UTC" });
+  const tile = (label: string, track: Track, fmt: (n: number) => string) => {
+    const pct = track.percent === null ? null : Math.min(100, track.percent);
+    const color = track.target === null ? "bg-stone-300" : (track.percent ?? 0) >= 100 || track.onTrack ? "bg-emerald-600" : "bg-amber-500";
+    return (
+      <div className="rounded-[18px] border border-stone-200 bg-white p-4">
+        <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-stone-500">{label}</p>
+        <p className="mt-1 text-2xl font-bold tabular-nums">{fmt(track.done)}{track.target !== null && <span className="text-sm font-semibold text-stone-500"> / {fmt(track.target)}</span>}</p>
+        <div aria-hidden className="mt-2 h-2.5 overflow-hidden rounded-full bg-stone-100"><div className={`h-full rounded-full transition-[width] duration-700 ease-out ${color}`} style={{ width: `${pct ?? 0}%` }} /></div>
+        <p className="mt-1.5 text-xs text-stone-500">
+          {track.target === null
+            ? `meta a definir · projeção ${fmt(track.projection)}`
+            : (track.percent ?? 0) >= 100
+              ? <b className="text-emerald-700">meta batida ({track.percent}%)</b>
+              : <>{track.percent}% da meta · faltam <b className="text-stone-800">{fmt(track.missing ?? 0)}</b>{month.daysLeft > 0 && track.perDay ? ` (${fmt(track.perDay)}/dia)` : ""} · projeção {fmt(track.projection)}</>}
+        </p>
+      </div>
+    );
+  };
+  return (
+    <section aria-label={`Meu mês de ${name}`} className="space-y-2">
+      <p className="text-[11px] font-extrabold uppercase tracking-[.16em] text-emerald-800">Meu mês · {name} · {month.orders} {month.orders === 1 ? "pedido" : "pedidos"} · {month.daysLeft} {month.daysLeft === 1 ? "dia" : "dias"} para fechar</p>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {tile("Vendas (R$)", month.revenue, (n) => brl.format(n))}
+        {tile("Volume (kg)", month.kg, (n) => `${kgFmt.format(n)} kg`)}
+      </div>
+    </section>
   );
 }
