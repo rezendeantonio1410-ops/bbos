@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { formatDeliveryDate } from "@/lib/delivery-date";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { Download } from "lucide-react";
@@ -209,7 +210,7 @@ export default function OrderDocumentV2() {
       ? order.paymentTermsSnapshot || "A prazo"
       : "À vista";
   const delivery = order?.expectedDeliveryDate
-    ? date.format(new Date(order.expectedDeliveryDate))
+    ? formatDeliveryDate(order.expectedDeliveryDate)
     : "A combinar";
   const address = useMemo(() => {
     if (!customer) return "—";
