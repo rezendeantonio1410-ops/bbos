@@ -67,3 +67,23 @@ test("mês do vendedor: R$ e kg contra a meta, com falta por dia", async () => {
   assert.deepEqual(validateSellerGoal({ partnerId: "p", month: "2026-12", salesTarget: "15.000,00", kgTarget: "120" }), { partnerId: "p", month: "2026-12", salesTarget: 15000, kgTarget: 120 });
   assert.throws(() => validateSellerGoal({ partnerId: "p", month: "2026-13" }), /Mês/);
 });
+
+test("caminho para a meta e conversa com o vendedor", async () => {
+  const { buildPortfolio, sellerMonth, pathToGoal, coachMessage } = await import("./seller-portfolio");
+  const now = new Date("2026-11-27T15:00:00Z");
+  const p = buildPortfolio([
+    { ...base, id: "a", name: "Cafe Grande", orderDates: ["2026-11-09T12:00:00Z", "2026-11-23T12:00:00Z"], revenue90: 5000, avgTicket: 2500 },
+    { ...base, id: "b", name: "Hospital Exemplo", orderDates: ["2026-11-13T12:00:00Z", "2026-11-18T12:00:00Z"], revenue90: 2700, avgTicket: 1350 },
+    { ...base, id: "c", name: "Padaria Nova", createdAt: "2026-11-20T12:00:00Z", pendingAmount: 360 },
+    { ...base, id: "d", name: "Devedor", orderDates: ["2026-11-18T12:00:00Z"], overdueAmount: 720, overdueSince: "2026-11-25T12:00:00Z", avgTicket: 720 },
+  ], now);
+  const month = sellerMonth({ revenue: 9300, kg: 134, orders: 8, salesTarget: 12000, kgTarget: 150, now });
+  const path = pathToGoal(p, month);
+  assert.deepEqual(path.opportunities.map((o) => [o.name, o.kind]), [["Padaria Nova", "CONFIRMAR"], ["Hospital Exemplo", "RECOMPRA"], ["Cafe Grande", "ANTECIPAR"]]);
+  assert.equal(path.covers, true);
+  const talk = coachMessage("Vendedor", p, month, path);
+  assert.match(talk[0]!, /78% da meta/);
+  assert.match(talk[1]!, /Se a Padaria Nova aprovar o pedido e Hospital Exemplo repetir a compra, você chega lá/);
+  assert.match(talk[2]!, /Comece por Devedor/);
+  assert.match(talk[3]!, /4 de 4 clientes estão sem visita/);
+});

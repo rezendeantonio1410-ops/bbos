@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import { randomUUID } from "node:crypto";
-import { buildPortfolio, portfolioAlerts, sellerMonth, validateSellerGoal, type PortfolioCustomerRow } from "./seller-portfolio";
+import { buildPortfolio, coachMessage, pathToGoal, portfolioAlerts, sellerMonth, validateSellerGoal, type PortfolioCustomerRow } from "./seller-portfolio";
 
 /**
  * Carteira do vendedor (clientes ligados ao parceiro de vendas dele) e os
@@ -47,7 +47,13 @@ export class SellerPortfolioService implements OnModuleInit, OnModuleDestroy {
               (SELECT MIN(r."dueDate") FROM "AccountsReceivable" r
                  WHERE r."customerId"=c.id AND r."companyId"=c."companyId"
                    AND r.status::text IN ('OPEN','OVERDUE','PARTIALLY_PAID') AND r."dueDate"<date_trunc('day',NOW())) AS "overdueSince",
-              (SELECT MAX(v."visitAt") FROM "CustomerVisit" v WHERE v."customerId"=c.id) AS "lastVisitAt"
+              (SELECT MAX(v."visitAt") FROM "CustomerVisit" v WHERE v."customerId"=c.id) AS "lastVisitAt",
+              (SELECT AVG(o."totalAmount")::float FROM "SalesOrder" o
+                 WHERE o."customerId"=c.id AND o."companyId"=c."companyId" AND o."orderType"='COMMERCIAL'
+                   AND o.status::text NOT IN ('CANCELLED','DRAFT') AND o."orderedAt">=NOW()-INTERVAL '365 days') AS "avgTicket",
+              COALESCE((SELECT SUM(o."totalAmount") FROM "SalesOrder" o
+                 WHERE o."customerId"=c.id AND o."companyId"=c."companyId" AND o."orderType"='COMMERCIAL'
+                   AND o.status::text='DRAFT'),0)::float AS "pendingAmount"
          FROM "StorefrontPartnerCustomer" link
          JOIN "Customer" c ON c.id=link."customerId"
         WHERE link."partnerId"=$1 AND c."companyId"=$2 AND c.active=true`,
@@ -57,9 +63,11 @@ export class SellerPortfolioService implements OnModuleInit, OnModuleDestroy {
     return rows.map((row) => ({ ...row, orderDates: Array.isArray(row.orderDates) ? row.orderDates : [] }));
   }
 
-  async portfolio(companyId: string, partnerId: string) {
+  async portfolio(companyId: string, partnerId: string, firstName = "") {
     const [rows, month] = await Promise.all([this.rows(companyId, partnerId), this.month(companyId, partnerId)]);
-    return { ...buildPortfolio(rows), month };
+    const portfolio = buildPortfolio(rows);
+    const path = pathToGoal(portfolio, month);
+    return { ...portfolio, month, path, coach: coachMessage(firstName, portfolio, month, path) };
   }
 
   /** Vendido no mês pela carteira (R$ e kg) contra a meta definida pela liderança. */

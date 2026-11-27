@@ -2,31 +2,42 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Bell, MessageCircle } from "lucide-react";
+import { ChevronDown, ClipboardCheck, MessageCircle, Plus, Sparkles, Target, UsersRound } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
 
 type Status = "COBRANCA" | "NOVO" | "ESFRIANDO" | "RECOMPRA" | "EM_DIA";
 type PortfolioCustomer = {
   id: string; name: string; phone: string | null; status: Status; orders: number; daysSince: number | null;
   rhythm: number; thermometer: number; lastOrderAt: string | null; revenue90: number; overdueAmount: number;
-  lastVisitAt: string | null; nextStep: string;
+  lastVisitAt: string | null; daysSinceVisit: number | null; avgTicket: number | null; pendingAmount: number;
+  nextOrderInDays: number | null; nextStep: string;
 };
 type Track = { done: number; target: number | null; percent: number | null; projection: number; missing: number | null; perDay: number | null; onTrack: boolean | null };
+type Opportunity = { customerId: string; name: string; phone: string | null; kind: "CONFIRMAR" | "RECOMPRA" | "ANTECIPAR" | "REATIVAR" | "PRIMEIRO"; value: number; reason: string };
 type Portfolio = {
   generatedAt: string;
-  month?: { month: string; daysLeft: number; orders: number; revenue: Track; kg: Track };
-  summary: { customers: number; revenue90: number; buyers90: number; overdue: number; overdueCustomers: string[]; withoutVisit: number; newWithoutOrder: string[]; attention: number };
+  month: { month: string; daysLeft: number; orders: number; revenue: Track; kg: Track };
+  path: { gap: number | null; total: number; covers: boolean | null; opportunities: Opportunity[] };
+  coach: string[];
   tasks: Array<{ customerId: string; status: Status; phone: string | null; title: string; detail: string; why: string }>;
   customers: PortfolioCustomer[];
 };
 
 const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
-const STATUS: Record<Status, { label: string; pill: string; bar: string; stripe: string }> = {
-  COBRANCA: { label: "Cobrança", pill: "bg-red-50 text-red-700", bar: "bg-amber-500", stripe: "bg-red-600" },
-  NOVO: { label: "Novo", pill: "bg-sky-50 text-sky-800", bar: "bg-sky-500", stripe: "bg-sky-600" },
-  ESFRIANDO: { label: "Esfriando", pill: "bg-amber-50 text-amber-800", bar: "bg-red-500", stripe: "bg-amber-500" },
-  RECOMPRA: { label: "Recompra chegando", pill: "bg-amber-50 text-amber-800", bar: "bg-amber-500", stripe: "bg-amber-500" },
-  EM_DIA: { label: "Em dia", pill: "bg-emerald-50 text-emerald-800", bar: "bg-emerald-600", stripe: "bg-emerald-600" },
+const kgFmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
+const STATUS: Record<Status, { label: string; pill: string; bar: string; order: number }> = {
+  COBRANCA: { label: "Cobrança", pill: "bg-red-50 text-red-700", bar: "bg-amber-500", order: 0 },
+  NOVO: { label: "Novo", pill: "bg-sky-50 text-sky-800", bar: "bg-sky-500", order: 1 },
+  ESFRIANDO: { label: "Esfriando", pill: "bg-amber-50 text-amber-800", bar: "bg-red-500", order: 2 },
+  RECOMPRA: { label: "Recompra chegando", pill: "bg-amber-50 text-amber-800", bar: "bg-amber-500", order: 3 },
+  EM_DIA: { label: "Em dia", pill: "bg-emerald-50 text-emerald-800", bar: "bg-emerald-600", order: 4 },
+};
+const KIND: Record<Opportunity["kind"], { label: string; color: string }> = {
+  CONFIRMAR: { label: "Confirmar pedido", color: "#2f80b8" },
+  RECOMPRA: { label: "Recompra", color: "#1f6b4f" },
+  ANTECIPAR: { label: "Antecipar", color: "#7fb89d" },
+  REATIVAR: { label: "Reativar", color: "#b86b00" },
+  PRIMEIRO: { label: "1º pedido", color: "#2f80b8" },
 };
 
 function whatsapp(phone: string | null, text: string) {
@@ -35,19 +46,21 @@ function whatsapp(phone: string | null, text: string) {
   return number ? `https://wa.me/${number}?text=${encodeURIComponent(text)}` : null;
 }
 
-function message(task: Portfolio["tasks"][number], name: string) {
+function waText(kind: Status | Opportunity["kind"], name: string) {
   const first = name.split(" ")[0];
-  if (task.status === "COBRANCA") return `Olá! Aqui é da Bispo Coffees. Tudo bem? Consta um pagamento em aberto (${task.detail.toLowerCase()}). Posso te enviar o Pix ou o boleto?`;
-  if (task.status === "NOVO") return `Olá! Aqui é da Bispo Coffees. Seu cadastro está pronto. Vamos fazer o primeiro pedido de café?`;
-  if (task.status === "RECOMPRA") return `Olá! Aqui é da Bispo Coffees. Como está o estoque de café aí no ${first}? Posso já separar a reposição?`;
-  return `Olá! Aqui é da Bispo Coffees. Tudo bem por aí? Faz um tempo que não falamos. Posso te ajudar com café esta semana?`;
+  if (kind === "COBRANCA") return "Olá! Aqui é da Bispo Coffees. Tudo bem? Consta um pagamento em aberto. Posso te enviar o Pix ou o boleto?";
+  if (kind === "NOVO" || kind === "PRIMEIRO") return "Olá! Aqui é da Bispo Coffees. Seu cadastro está pronto. Vamos fazer o primeiro pedido de café?";
+  if (kind === "CONFIRMAR") return "Olá! Aqui é da Bispo Coffees. Enviei o seu pedido para aprovação. Conseguiu ver o link?";
+  if (kind === "RECOMPRA" || kind === "ANTECIPAR") return `Olá! Aqui é da Bispo Coffees. Como está o estoque de café aí no ${first}? Posso já separar a reposição?`;
+  return "Olá! Aqui é da Bispo Coffees. Tudo bem por aí? Faz um tempo que não falamos. Posso te ajudar com café esta semana?";
 }
 
-/** "Minha carteira": o que fazer hoje, a carteira com termômetro e os valores do vendedor. */
-export function SellerPortfolio() {
+/** Tela do vendedor: meta (R$ e kg), conversa do BBOS, caminho para a meta, uma ação agora e a carteira. */
+export function SellerHome({ greeting, firstName }: { greeting: string; firstName: string }) {
   const [data, setData] = React.useState<Portfolio | null>(null);
   const [error, setError] = React.useState("");
   const [hidden, setHidden] = React.useState<Set<string>>(new Set());
+  const [openCustomer, setOpenCustomer] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const controller = new AbortController();
@@ -61,7 +74,7 @@ export function SellerPortfolio() {
     return () => controller.abort();
   }, []);
 
-  const snooze = async (key: string, action: "TOMORROW" | "WEEK" | "DONE") => {
+  const snooze = async (key: string, action: "TOMORROW" | "DONE") => {
     setHidden((current) => new Set(current).add(key));
     await fetch(`${getApiBaseUrl()}/command-center/tasks/snooze`, {
       method: "POST", credentials: "include", headers: { "content-type": "application/json" },
@@ -69,118 +82,178 @@ export function SellerPortfolio() {
     }).catch(() => null);
   };
 
-  if (error) return <p role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</p>;
-  if (!data) return <div aria-hidden className="h-40 animate-pulse rounded-[20px] bg-stone-100" />;
+  const today = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" });
+  const header = (
+    <header className="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 className="text-[26px] font-semibold tracking-[-.02em]">{greeting}{firstName ? `, ${firstName}` : ""}</h1>
+        <p className="text-sm text-stone-500 first-letter:uppercase">{today}</p>
+      </div>
+      {data && <span className="rounded-full bg-amber-50 px-3 py-1.5 text-[13px] font-bold text-amber-800">{data.month.daysLeft} {data.month.daysLeft === 1 ? "dia" : "dias"} para fechar o mês</span>}
+    </header>
+  );
 
-  const s = data.summary;
+  if (error) return <div className="mx-auto max-w-[900px] space-y-4 pb-28">{header}<p role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{error}</p></div>;
+  if (!data) return <div className="mx-auto max-w-[900px] space-y-4 pb-28">{header}<div aria-hidden className="h-56 animate-pulse rounded-3xl bg-stone-100" /><div aria-hidden className="h-40 animate-pulse rounded-3xl bg-stone-100" /></div>;
+
   const tasks = data.tasks.filter((task) => !hidden.has(`seller:${task.customerId}:${task.status}`));
-  const kpi = "rounded-[18px] border border-stone-200 bg-white p-4";
+  const now = tasks[0];
+  const customers = [...data.customers].sort((a, b) => STATUS[a.status].order - STATUS[b.status].order || b.revenue90 - a.revenue90);
+  const card = "rounded-[24px] border border-stone-200 bg-white p-5";
+
   return (
-    <div id="carteira" className="space-y-4">
-      {data.month && <MonthGoals month={data.month} />}
-      <section aria-label="Resumo da carteira" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <div className={kpi}><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-stone-500">Vendido · 90 dias</p><p className="mt-1 text-2xl font-bold tabular-nums">{brl.format(s.revenue90)}</p><p className="text-xs text-stone-500">{s.buyers90} de {s.customers} clientes compraram</p></div>
-        <div className={kpi}><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-stone-500">Vencido na carteira</p><p className={`mt-1 text-2xl font-bold tabular-nums ${s.overdue > 0 ? "text-red-700" : ""}`}>{brl.format(s.overdue)}</p><p className="truncate text-xs text-stone-500">{s.overdueCustomers.length ? s.overdueCustomers.join(", ") : "nada vencido"}</p></div>
-        <div className={kpi}><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-stone-500">Sem visita registrada</p><p className={`mt-1 text-2xl font-bold tabular-nums ${s.withoutVisit ? "text-amber-700" : ""}`}>{s.withoutVisit} de {s.customers}</p><p className="text-xs text-stone-500"><Link href="/atendimento" className="font-semibold text-emerald-800 underline underline-offset-2">registrar visita</Link></p></div>
-        <div className={kpi}><p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-stone-500">Pedem atenção</p><p className={`mt-1 text-2xl font-bold tabular-nums ${s.attention ? "text-amber-700" : "text-emerald-700"}`}>{s.attention}</p><p className="text-xs text-stone-500">{s.attention ? "veja a lista abaixo" : "carteira em dia"}</p></div>
+    <div className="mx-auto max-w-[900px] space-y-4 pb-28">
+      {header}
+
+      <section id="meta" aria-label="Meta do mês" className={`${card} grid items-center gap-5 sm:grid-cols-[auto_1fr]`}>
+        <Rings revenue={data.month.revenue} kg={data.month.kg} />
+        <div className="space-y-3">
+          <Line color="bg-emerald-700" value={brl.format(data.month.revenue.done)} target={data.month.revenue.target === null ? "meta a definir" : `de ${brl.format(data.month.revenue.target)}`} />
+          <Line color="bg-sky-600" value={`${kgFmt.format(data.month.kg.done)} kg`} target={data.month.kg.target === null ? "meta a definir" : `de ${kgFmt.format(data.month.kg.target)} kg`} />
+          <div className="rounded-2xl bg-emerald-50 p-3.5 text-[15px] leading-relaxed text-emerald-950" aria-live="polite">
+            <p className="mb-1 inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-[.14em] text-emerald-800"><Sparkles size={13} /> BBOS</p>
+            {data.coach.map((line) => <p key={line}>{line}</p>)}
+          </div>
+        </div>
       </section>
 
-      <section aria-labelledby="hoje-title" className="rounded-[20px] border border-stone-200 bg-white p-5">
-        <h2 id="hoje-title" className="flex items-center gap-2 text-lg font-bold">
-          Fale hoje com {tasks.length > 0 && <span className="rounded-full bg-stone-900 px-2 text-xs font-bold text-white">{tasks.length}</span>}
-          <span className="ml-auto inline-flex items-center gap-1 text-xs font-normal text-stone-500"><Bell size={13} /> avisos também no sino</span>
-        </h2>
-        <p className="text-xs text-stone-500">por ordem: dinheiro parado, cliente novo, cliente esfriando, recompra chegando</p>
-        {tasks.length === 0 ? <p className="py-4 text-sm text-stone-500">Ninguém da carteira pede atenção agora. Bom trabalho.</p> : (
+      {data.path.opportunities.length > 0 && (
+        <section aria-labelledby="path-title" className={card}>
+          <h2 id="path-title" className="text-[19px] font-bold">Como chegar lá</h2>
+          <p className="text-sm text-stone-500">
+            {data.path.gap !== null && data.path.gap > 0
+              ? data.path.covers ? "Fechando estes, você bate a meta." : "Estes ajudam; vale buscar cliente novo também."
+              : "Clientes com mais chance de comprar agora."}
+          </p>
+          {data.path.gap !== null && data.path.gap > 0 && (
+            <div className="mt-3">
+              <div className="flex h-3.5 overflow-hidden rounded-full bg-stone-100" aria-label={`Oportunidades somam ${brl.format(data.path.total)} para ${brl.format(data.path.gap)} que faltam`}>
+                {data.path.opportunities.filter((o) => o.value > 0).map((o) => (
+                  <i key={o.customerId} className="block h-full transition-[width] duration-700 ease-out" style={{ width: `${Math.min(100, (o.value / Math.max(data.path.gap!, data.path.total)) * 100)}%`, background: KIND[o.kind].color }} />
+                ))}
+              </div>
+              <div className="mt-1 flex justify-between text-xs text-stone-500"><span>falta {brl.format(data.path.gap)}</span><span>oportunidades {brl.format(data.path.total)}</span></div>
+            </div>
+          )}
           <ul className="mt-2 divide-y divide-stone-100">
-            {tasks.map((task) => {
-              const key = `seller:${task.customerId}:${task.status}`;
-              const customer = data.customers.find((c) => c.id === task.customerId);
-              const wa = whatsapp(task.phone, message(task, customer?.name ?? ""));
-              const primary = task.status === "NOVO" || task.status === "RECOMPRA"
-                ? { href: `/pedidos?novo=1&cliente=${encodeURIComponent(task.customerId)}`, label: task.status === "NOVO" ? "Fazer o 1º pedido" : "Novo pedido" }
-                : task.status === "COBRANCA"
-                  ? { href: `/clientes?cliente=${encodeURIComponent(task.customerId)}`, label: "Ver cliente" }
-                  : { href: `/atendimento?cliente=${encodeURIComponent(task.customerId)}`, label: "Registrar visita ou ligação" };
+            {data.path.opportunities.map((o) => {
+              const wa = whatsapp(o.phone, waText(o.kind, o.name));
               return (
-                <li key={key} className="grid grid-cols-[4px_1fr] gap-3 py-3">
-                  <span aria-hidden className={`rounded ${STATUS[task.status].stripe}`} />
+                <li key={o.customerId} className="grid grid-cols-[1fr_auto] items-center gap-3 py-3.5">
                   <div className="min-w-0">
-                    <p className="text-[15px] font-semibold">{task.title}</p>
-                    <p className="text-[13px] text-stone-500">{task.detail}</p>
-                    <p className="text-[12.5px] font-semibold text-emerald-800">{task.why}</p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      <Link href={primary.href} className="inline-flex min-h-10 items-center rounded-xl bg-stone-900 px-3.5 text-[13px] font-bold text-white">{primary.label}</Link>
-                      {wa && <a href={wa} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-stone-200 px-3 text-[13px] font-semibold"><MessageCircle size={14} /> WhatsApp</a>}
-                      <button type="button" onClick={() => void snooze(key, "TOMORROW")} className="min-h-10 rounded-xl border border-stone-200 px-3 text-[13px] font-semibold text-stone-600">Amanhã</button>
-                      <button type="button" onClick={() => void snooze(key, "DONE")} className="min-h-10 rounded-xl border border-stone-200 px-3 text-[13px] font-semibold text-stone-600">Feito</button>
-                    </div>
+                    <p className="truncate text-[16px] font-semibold"><span aria-hidden className="mr-2 inline-block size-2.5 rounded-full" style={{ background: KIND[o.kind].color }} />{o.name}</p>
+                    <p className="text-sm text-stone-500">{KIND[o.kind].label} · {o.reason}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {o.value > 0 && <span className="text-[16px] font-bold tabular-nums">~{brl.format(o.value)}</span>}
+                    {wa
+                      ? <a href={wa} target="_blank" rel="noreferrer" aria-label={`WhatsApp para ${o.name}`} className="grid size-12 place-items-center rounded-2xl bg-emerald-700 text-white"><MessageCircle size={20} /></a>
+                      : <Link href={o.kind === "CONFIRMAR" ? "/pedidos" : `/pedidos?novo=1&cliente=${encodeURIComponent(o.customerId)}`} aria-label={`Abrir ${o.name}`} className="grid size-12 place-items-center rounded-2xl bg-stone-900 text-white"><Plus size={20} /></Link>}
                   </div>
                 </li>
               );
             })}
           </ul>
-        )}
-      </section>
+        </section>
+      )}
 
-      <section aria-labelledby="carteira-title" className="rounded-[20px] border border-stone-200 bg-white p-5">
-        <h2 id="carteira-title" className="text-lg font-bold">Minha carteira</h2>
-        <p className="text-xs text-stone-500">o termômetro enche conforme o cliente se aproxima do prazo em que costuma comprar</p>
-        <div className="mt-2 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-[13.5px]">
-            <thead className="border-b border-stone-200 text-[11px] uppercase tracking-[.08em] text-stone-500">
-              <tr><th className="py-2 pr-2 font-semibold">Cliente</th><th className="px-2 py-2 font-semibold">Situação</th><th className="px-2 py-2 font-semibold">Última compra</th><th className="px-2 py-2 font-semibold">Termômetro</th><th className="px-2 py-2 text-right font-semibold">90 dias</th><th className="py-2 pl-2 font-semibold">Próximo passo</th></tr>
-            </thead>
-            <tbody className="divide-y divide-stone-100">
-              {data.customers.map((c) => (
-                <tr key={c.id}>
-                  <td className="py-2.5 pr-2"><Link href={`/clientes?cliente=${encodeURIComponent(c.id)}`} className="font-semibold hover:underline">{c.name}</Link></td>
-                  <td className="px-2 py-2.5"><span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[11.5px] font-bold ${STATUS[c.status].pill}`}>{STATUS[c.status].label}</span></td>
-                  <td className="whitespace-nowrap px-2 py-2.5 text-stone-600">{c.lastOrderAt ? `${new Date(c.lastOrderAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "UTC" })} · ${c.daysSince} ${c.daysSince === 1 ? "dia" : "dias"}` : "sem pedido"}</td>
-                  <td className="px-2 py-2.5"><div className="h-2 w-28 overflow-hidden rounded-full bg-stone-100" title={`${Math.round(c.thermometer * 100)}% do prazo`}><div className={`h-full ${c.thermometer >= 1 ? "bg-red-500" : STATUS[c.status].bar}`} style={{ width: `${Math.round(c.thermometer * 100)}%` }} /></div></td>
-                  <td className="whitespace-nowrap px-2 py-2.5 text-right tabular-nums">{c.revenue90 ? brl.format(c.revenue90) : "—"}</td>
-                  <td className="py-2.5 pl-2 text-stone-600">{c.nextStep}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {now && (
+        <section aria-label="Agora" className={`${card} border-l-[6px] ${now.status === "COBRANCA" ? "border-l-red-600" : now.status === "NOVO" ? "border-l-sky-600" : "border-l-amber-500"}`}>
+          <p className="text-[11px] font-extrabold uppercase tracking-[.14em] text-stone-500">Agora</p>
+          <h2 className="mt-1 text-[19px] font-bold">{now.title}</h2>
+          <p className="text-sm text-stone-500">{now.detail} · {now.why}</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(() => {
+              const wa = whatsapp(now.phone, waText(now.status, now.title));
+              return wa
+                ? <a href={wa} target="_blank" rel="noreferrer" className="inline-flex min-h-[52px] items-center gap-2 rounded-2xl bg-stone-900 px-5 text-[15px] font-bold text-white"><MessageCircle size={18} /> WhatsApp</a>
+                : <Link href={`/clientes?cliente=${encodeURIComponent(now.customerId)}`} className="inline-flex min-h-[52px] items-center rounded-2xl bg-stone-900 px-5 text-[15px] font-bold text-white">Abrir cliente</Link>;
+            })()}
+            <button type="button" onClick={() => void snooze(`seller:${now.customerId}:${now.status}`, "DONE")} className="min-h-[52px] rounded-2xl border border-stone-200 px-5 text-[15px] font-semibold">Feito</button>
+            <button type="button" onClick={() => void snooze(`seller:${now.customerId}:${now.status}`, "TOMORROW")} className="min-h-[52px] rounded-2xl border border-stone-200 px-5 text-[15px] font-semibold text-stone-600">Amanhã</button>
+          </div>
+          {tasks[1] && <p className="mt-3 text-[13px] text-stone-500">Depois: {tasks[1].title}</p>}
+        </section>
+      )}
+
+      <section id="carteira" aria-labelledby="carteira-title" className="space-y-2">
+        <h2 id="carteira-title" className="px-1 text-[19px] font-bold">Minha carteira <span className="text-sm font-normal text-stone-500">· {customers.length} clientes · toque para ver mais</span></h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {customers.map((c) => {
+            const open = openCustomer === c.id;
+            const wa = whatsapp(c.phone, waText(c.status, c.name));
+            return (
+              <article key={c.id} className="rounded-[20px] border border-stone-200 bg-white">
+                <button type="button" aria-expanded={open} onClick={() => setOpenCustomer(open ? null : c.id)} className="grid w-full gap-2 p-4 text-left">
+                  <span className="flex items-center justify-between gap-2"><span className="truncate text-[16px] font-semibold">{c.name}</span><ChevronDown size={18} className={`shrink-0 text-stone-400 transition-transform ${open ? "rotate-180" : ""}`} /></span>
+                  <span className={`justify-self-start rounded-full px-2.5 py-0.5 text-xs font-bold ${STATUS[c.status].pill}`}>{STATUS[c.status].label}</span>
+                  <span aria-hidden className="h-2 overflow-hidden rounded-full bg-stone-100"><span className={`block h-full ${c.thermometer >= 1 ? "bg-red-500" : STATUS[c.status].bar}`} style={{ width: `${Math.round(c.thermometer * 100)}%` }} /></span>
+                  <span className="text-[13px] text-stone-500">{c.overdueAmount > 0 ? `${brl.format(c.overdueAmount)} vencido · ` : ""}{c.lastOrderAt ? `última compra há ${c.daysSince} ${c.daysSince === 1 ? "dia" : "dias"}` : c.pendingAmount > 0 ? "1º pedido aguardando o cliente" : "sem pedido ainda"}</span>
+                </button>
+                {open && (
+                  <div className="border-t border-stone-100 px-4 pb-4 pt-3">
+                    <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                      <div><dt className="text-xs text-stone-500">Compra a cada</dt><dd className="font-semibold">{c.orders >= 2 ? `~${c.rhythm} dias` : "ainda sem ritmo"}</dd></div>
+                      <div><dt className="text-xs text-stone-500">Compra em média</dt><dd className="font-semibold">{c.avgTicket ? brl.format(c.avgTicket) : "—"}</dd></div>
+                      <div><dt className="text-xs text-stone-500">Últimos 90 dias</dt><dd className="font-semibold">{c.revenue90 ? brl.format(c.revenue90) : "—"}</dd></div>
+                      <div><dt className="text-xs text-stone-500">Última visita</dt><dd className={`font-semibold ${c.daysSinceVisit === null || c.daysSinceVisit > 30 ? "text-amber-700" : ""}`}>{c.daysSinceVisit === null ? "nenhuma registrada" : `há ${c.daysSinceVisit} dias`}</dd></div>
+                      <div className="col-span-2"><dt className="text-xs text-stone-500">Próximo passo</dt><dd className="font-semibold">{c.nextStep === "—" ? c.nextOrderInDays !== null && c.nextOrderInDays > 0 ? `Próxima compra prevista em ~${c.nextOrderInDays} dias` : "Manter contato" : c.nextStep}</dd></div>
+                    </dl>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <Link href={`/pedidos?novo=1&cliente=${encodeURIComponent(c.id)}`} className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl bg-stone-900 px-4 text-sm font-bold text-white"><Plus size={16} /> Pedido</Link>
+                      {wa && <a href={wa} target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl border border-stone-200 px-4 text-sm font-semibold"><MessageCircle size={16} /> WhatsApp</a>}
+                      <Link href={`/atendimento?cliente=${encodeURIComponent(c.id)}`} className="inline-flex min-h-12 items-center gap-1.5 rounded-2xl border border-stone-200 px-4 text-sm font-semibold"><ClipboardCheck size={16} /> Visita</Link>
+                    </div>
+                  </div>
+                )}
+              </article>
+            );
+          })}
         </div>
       </section>
+
+      <nav aria-label="Atalhos do vendedor" className="fixed inset-x-0 bottom-0 z-40 border-t border-stone-200 bg-white/95 backdrop-blur lg:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div className="mx-auto grid max-w-[600px] grid-cols-4">
+          <a href="#meta" className="grid place-items-center gap-0.5 py-2.5 text-xs font-semibold text-emerald-800"><Target size={22} />Meta</a>
+          <a href="#carteira" className="grid place-items-center gap-0.5 py-2.5 text-xs font-semibold text-stone-600"><UsersRound size={22} />Carteira</a>
+          <Link href="/pedidos?novo=1" className="grid place-items-center gap-0.5 py-2.5 text-xs font-semibold text-stone-600"><Plus size={22} />Novo pedido</Link>
+          <Link href="/atendimento" className="grid place-items-center gap-0.5 py-2.5 text-xs font-semibold text-stone-600"><ClipboardCheck size={22} />Visitas</Link>
+        </div>
+      </nav>
     </div>
   );
 }
 
+function Line({ color, value, target }: { color: string; value: string; target: string }) {
+  return (
+    <p className="flex items-baseline gap-2.5"><i aria-hidden className={`inline-block size-3 shrink-0 rounded-full ${color}`} /><b className="text-[22px] font-extrabold tabular-nums">{value}</b><span className="text-sm text-stone-500">{target}</span></p>
+  );
+}
 
-const kgFmt = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 });
-
-/** Meu mês: vendido em R$ e kg contra a meta definida pela liderança. */
-function MonthGoals({ month }: { month: NonNullable<Portfolio["month"]> }) {
-  const name = new Date(`${month.month}-15T12:00:00Z`).toLocaleDateString("pt-BR", { month: "long", timeZone: "UTC" });
-  const tile = (label: string, track: Track, fmt: (n: number) => string) => {
-    const pct = track.percent === null ? null : Math.min(100, track.percent);
-    const color = track.target === null ? "bg-stone-300" : (track.percent ?? 0) >= 100 || track.onTrack ? "bg-emerald-600" : "bg-amber-500";
+/** Dois anéis (R$ por fora, kg por dentro), como os anéis de atividade. */
+function Rings({ revenue, kg }: { revenue: Track; kg: Track }) {
+  const ring = (r: number, percent: number | null, color: string, soft: string) => {
+    const length = 2 * Math.PI * r;
+    const value = Math.min(100, Math.max(0, percent ?? 0));
     return (
-      <div className="rounded-[18px] border border-stone-200 bg-white p-4">
-        <p className="text-[10px] font-extrabold uppercase tracking-[.14em] text-stone-500">{label}</p>
-        <p className="mt-1 text-2xl font-bold tabular-nums">{fmt(track.done)}{track.target !== null && <span className="text-sm font-semibold text-stone-500"> / {fmt(track.target)}</span>}</p>
-        <div aria-hidden className="mt-2 h-2.5 overflow-hidden rounded-full bg-stone-100"><div className={`h-full rounded-full transition-[width] duration-700 ease-out ${color}`} style={{ width: `${pct ?? 0}%` }} /></div>
-        <p className="mt-1.5 text-xs text-stone-500">
-          {track.target === null
-            ? `meta a definir · projeção ${fmt(track.projection)}`
-            : (track.percent ?? 0) >= 100
-              ? <b className="text-emerald-700">meta batida ({track.percent}%)</b>
-              : <>{track.percent}% da meta · faltam <b className="text-stone-800">{fmt(track.missing ?? 0)}</b>{month.daysLeft > 0 && track.perDay ? ` (${fmt(track.perDay)}/dia)` : ""} · projeção {fmt(track.projection)}</>}
-        </p>
-      </div>
+      <>
+        <circle cx="100" cy="100" r={r} fill="none" stroke={soft} strokeWidth="18" />
+        <circle cx="100" cy="100" r={r} fill="none" stroke={color} strokeWidth="18" strokeLinecap="round" strokeDasharray={length} strokeDashoffset={length * (1 - value / 100)} className="transition-[stroke-dashoffset] duration-1000 ease-out" />
+      </>
     );
   };
+  const main = revenue.percent ?? kg.percent;
   return (
-    <section aria-label={`Meu mês de ${name}`} className="space-y-2">
-      <p className="text-[11px] font-extrabold uppercase tracking-[.16em] text-emerald-800">Meu mês · {name} · {month.orders} {month.orders === 1 ? "pedido" : "pedidos"} · {month.daysLeft} {month.daysLeft === 1 ? "dia" : "dias"} para fechar</p>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {tile("Vendas (R$)", month.revenue, (n) => brl.format(n))}
-        {tile("Volume (kg)", month.kg, (n) => `${kgFmt.format(n)} kg`)}
+    <div className="relative mx-auto size-[180px]">
+      <svg viewBox="0 0 200 200" className="size-full -rotate-90" aria-hidden>
+        {ring(86, revenue.percent, "#1f6b4f", "#e3f0e9")}
+        {ring(62, kg.percent, "#2f80b8", "#e2eef7")}
+      </svg>
+      <div className="absolute inset-0 grid place-items-center text-center">
+        {main === null
+          ? <div><b className="block text-2xl font-extrabold">sem meta</b><span className="text-xs text-stone-500">a definir</span></div>
+          : <div><b className="block text-[38px] font-extrabold leading-none tracking-[-.03em]">{main}%</b><span className="text-xs text-stone-500">da meta</span></div>}
       </div>
-    </section>
+    </div>
   );
 }

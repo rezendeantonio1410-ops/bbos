@@ -20,7 +20,8 @@ export class SellerPortfolioController {
     const own = salesPortfolioPartnerId(actor as never);
     const target = own ?? String(partnerId ?? "").trim();
     if (!target) throw new BadRequestException("Escolha o vendedor.");
-    return { generatedAt: new Date().toISOString(), ...(await this.portfolios.portfolio(actor.companyId, target)) };
+    const firstName = own ? String(actor.name ?? "").trim().split(/\s+/)[0] ?? "" : "";
+    return { generatedAt: new Date().toISOString(), ...(await this.portfolios.portfolio(actor.companyId, target, firstName)) };
   }
 
   /** Metas dos vendedores num mês (liderança, tela de Parceiros). */
