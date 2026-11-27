@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import { shipmentDestination } from "../../marketplace-geo";
 import { prisma } from "@bbos/database";
 import {
   createCipheriv,
@@ -463,6 +464,8 @@ export class MercadoLivreService {
           WHERE "companyId"=$1 AND provider='MERCADO_LIVRE'`,
         companyId,
       );
+      // Destino (cidade/UF) para o mapa de vendas; não derruba a sincronização.
+      await this.fillDestinations(companyId).catch(() => undefined);
       return { runId, recordsRead: results.length };
     } catch (error) {
       const { message } = await this.recordFailure(companyId, error);
@@ -473,6 +476,46 @@ export class MercadoLivreService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Cidade e UF de entrega dos pedidos ainda sem destino (até 25 por rodada),
+   * pela API de envios. Falha num pedido não interrompe os outros; tenta de
+   * novo depois de 6 horas, no máximo 5 vezes.
+   */
+  async fillDestinations(companyId: string, limit = 25) {
+    const pending = await this.database.$queryRawUnsafe<Array<{ id: string; shipmentId: string | null }>>(
+      `SELECT moi.id,moi.payload->'shipping'->>'id' AS "shipmentId"
+         FROM "MarketplaceOrderInbox" moi
+         LEFT JOIN "MarketplaceOrderDestination" d ON d."inboxId"=moi.id
+        WHERE moi."companyId"=$1 AND moi.provider='MERCADO_LIVRE'
+          AND moi.payload->'shipping'->>'id' IS NOT NULL
+          AND (d."inboxId" IS NULL OR (d.state IS NULL AND d.attempts<5 AND d."fetchedAt"<NOW()-INTERVAL '6 hours'))
+        ORDER BY moi."orderedAt" DESC NULLS LAST
+        LIMIT $2`,
+      companyId,
+      limit,
+    );
+    let filled = 0;
+    for (const row of pending) {
+      let destination: { city: string; state: string } | null = null;
+      let error: string | null = null;
+      try {
+        destination = shipmentDestination(await this.request(companyId, `/shipments/${encodeURIComponent(String(row.shipmentId))}`));
+        if (!destination) error = "Envio sem cidade/UF de destino.";
+      } catch (cause) {
+        error = cause instanceof Error ? cause.message.slice(0, 300) : "Falha ao consultar o envio.";
+      }
+      await this.database.$executeRawUnsafe(
+        `INSERT INTO "MarketplaceOrderDestination" ("inboxId","companyId",city,state,attempts,"lastError","fetchedAt")
+         VALUES ($1,$2,$3,$4,1,$5,NOW())
+         ON CONFLICT ("inboxId") DO UPDATE SET city=EXCLUDED.city,state=EXCLUDED.state,
+           attempts="MarketplaceOrderDestination".attempts+1,"lastError"=EXCLUDED."lastError","fetchedAt"=NOW()`,
+        row.id, companyId, destination?.city ?? null, destination?.state ?? null, error,
+      );
+      if (destination) filled += 1;
+    }
+    return { checked: pending.length, filled };
   }
 
   async syncConnectedCompanies() {
