@@ -56,3 +56,21 @@ test("cash buffer days (JPMorgan Chase Institute)", () => {
   assert.equal(cashBufferDays(4685.49, 37702.86), 4);
   assert.equal(cashBufferDays(1000, 0), null);
 });
+
+test("dias de caixa usam as saídas de 30 dias da API, não só os movimentos após o extrato", async () => {
+  const { paidLast30Days, cashBufferDays } = await import("./cash-forecast");
+  const now = Date.parse("2026-11-27T12:00:00Z");
+  const onlyAfterStatement = { transactions: [{ type: "PAYMENT", occurredAt: "2026-11-26T12:00:00Z", amount: 15.1 }] };
+  assert.equal(paidLast30Days(onlyAfterStatement, now), 15.1);
+  assert.equal(paidLast30Days({ ...onlyAfterStatement, paidLast30Days: 37597.69 }, now), 37597.69);
+  assert.equal(cashBufferDays(6740, 37597.69), 5);
+});
+
+test("previstos do dia mostram o nome do imposto, não a fórmula", async () => {
+  const { plannedLabel, plannedTitle } = await import("./cash-forecast");
+  const irpj = plannedTitle({ kind: "TAX", document: "IRPJ (estimativa mensal) 11/2026" });
+  const csll = plannedTitle({ kind: "TAX", document: "CSLL (estimativa mensal) 11/2026" });
+  assert.equal(irpj, "IRPJ");
+  assert.equal(plannedLabel([{ title: irpj, detail: "15% sobre 8% das vendas" }, { title: csll, detail: "9% sobre 12% das vendas" }]), "IRPJ e CSLL");
+  assert.equal(plannedLabel([{ detail: "Aluguel" }, { detail: "Internet" }, { detail: "Energia" }]), "Aluguel, Internet e Energia");
+});
