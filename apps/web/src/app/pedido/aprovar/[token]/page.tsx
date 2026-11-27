@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { formatDeliveryDate } from "@/lib/delivery-date";
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useParams } from "next/navigation";
@@ -137,7 +138,7 @@ export default function PublicOrderApprovalPage() {
   const approved = approval.status === "APPROVED";
   const expires = new Date(approval.expiresAt).toLocaleDateString("pt-BR");
   const delivery = order.expectedDeliveryDate
-    ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
+    ? formatDeliveryDate(order.expectedDeliveryDate)
     : order.estimatedDeliveryDays
       ? `Até ${order.estimatedDeliveryDays} dias úteis`
       : "A combinar";

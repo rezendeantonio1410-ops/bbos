@@ -313,10 +313,13 @@ export class DashboardService implements OnModuleDestroy {
     const open = orders.filter(
       (o) => !["SHIPPED", "DELIVERED", "CANCELLED"].includes(o.status),
     ).length;
+    // Data de entrega é dia do calendário (meia-noite UTC): só atrasa depois
+    // que o dia termina em Brasília.
+    const todaySp = new Date(now.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
     const overdue = orders.filter(
       (o) =>
         o.expectedDeliveryDate &&
-        o.expectedDeliveryDate < now &&
+        new Date(o.expectedDeliveryDate).toISOString().slice(0, 10) < todaySp &&
         !["SHIPPED", "DELIVERED", "CANCELLED"].includes(o.status),
     ).length;
     const orderFlow = {

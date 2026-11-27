@@ -45,6 +45,7 @@ import {
   isCompleteOrderDraftLine,
 } from "@/lib/order-draft-lines";
 import { orderPaymentDue } from "@/lib/order-payment-due";
+import { deliveryDaysLate, formatDeliveryDate } from "@/lib/delivery-date";
 import { DirectShipmentCard } from "@/components/direct-shipment-card";
 import { directShipmentStatus, type DirectShipmentSummary } from "@/lib/direct-shipment";
 
@@ -581,15 +582,13 @@ const isOverdueOrder = (order: Order, now = Date.now()) => {
   ) {
     return false;
   }
-  const expected = new Date(order.expectedDeliveryDate).getTime();
-  return Number.isFinite(expected) && expected < now;
+  // Dia do calendário: só atrasa depois que o dia da entrega termina (Brasília).
+  return deliveryDaysLate(order.expectedDeliveryDate, now) > 0;
 };
 
 const overdueDays = (order: Order, now = Date.now()) => {
   if (!order.expectedDeliveryDate) return 0;
-  const expected = new Date(order.expectedDeliveryDate).getTime();
-  if (!Number.isFinite(expected)) return 0;
-  return Math.max(1, Math.ceil((now - expected) / 86_400_000));
+  return Math.max(1, deliveryDaysLate(order.expectedDeliveryDate, now));
 };
 
 const displayStatus = (order: Order) => {
@@ -4433,7 +4432,7 @@ function OrderDrawer({
         ? billingSummary?.paymentTerms || order.paymentTermsSnapshot || "A prazo"
         : "À vista";
   const deliveryLabel = order.expectedDeliveryDate
-    ? new Date(order.expectedDeliveryDate).toLocaleDateString("pt-BR")
+    ? formatDeliveryDate(order.expectedDeliveryDate)
     : order.estimatedDeliveryDays
       ? `Até ${order.estimatedDeliveryDays} dias úteis após a postagem`
       : "A combinar";
