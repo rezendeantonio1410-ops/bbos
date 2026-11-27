@@ -63,3 +63,12 @@ test("atraso habitual pelo nome do cliente", () => {
   assert.equal(delayFor("hospital exemplo ", delays), 6);
   assert.equal(delayFor("Outro", delays), null);
 });
+
+test("faixa de hoje destaca só o que chegou desde a última leitura", async () => {
+  const { freshSaleIds, saleTime } = await import("./command-center-v6");
+  const sale = (id: string) => ({ id, code: id, at: "2026-11-27T11:11:00Z", amount: 10, customer: null, channel: "Mercado Livre", marketplace: true });
+  const base = { generatedAt: "", total: 0, orders: 0, byChannel: [], marketplaceMonth: { amount: 0, orders: 0, byChannel: [] } };
+  assert.equal(freshSaleIds(null, { ...base, feed: [sale("a")] }).size, 0);
+  assert.deepEqual([...freshSaleIds({ ...base, feed: [sale("a")] }, { ...base, feed: [sale("b"), sale("a")] })], ["b"]);
+  assert.equal(saleTime("2026-11-27T11:11:00Z"), "08:11");
+});

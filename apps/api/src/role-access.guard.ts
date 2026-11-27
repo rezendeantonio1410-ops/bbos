@@ -245,6 +245,7 @@ const HANDLER_ROLE_POLICY: Readonly<
   },
   CommandCenterController: {
     insights: CORE,
+    today: CORE,
     saveGoal: LEADERSHIP,
     snooze: CORE,
     unsnooze: CORE,

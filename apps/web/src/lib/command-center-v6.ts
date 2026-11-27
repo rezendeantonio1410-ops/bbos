@@ -111,3 +111,25 @@ export function parseGoalInput(value: string) {
   const n = Number(cleaned);
   return cleaned && Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
 }
+
+export type TodaySale = { id: string; code: string; at: string; amount: number; customer: string | null; channel: string; marketplace: boolean };
+export type TodaySales = {
+  generatedAt: string;
+  total: number;
+  orders: number;
+  byChannel: Array<{ channel: string; amount: number; orders: number; marketplace: boolean }>;
+  feed: TodaySale[];
+  marketplaceMonth: { amount: number; orders: number; byChannel: Array<{ channel: string; amount: number; orders: number }> };
+};
+
+/** Pedidos que chegaram desde a última leitura (para destacar na faixa). */
+export function freshSaleIds(previous: TodaySales | null, next: TodaySales) {
+  if (!previous) return new Set<string>();
+  const seen = new Set(previous.feed.map((sale) => sale.id));
+  return new Set(next.feed.filter((sale) => !seen.has(sale.id)).map((sale) => sale.id));
+}
+
+/** Hora local (São Paulo) de um pedido, "08:11". */
+export function saleTime(iso: string) {
+  return new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+}

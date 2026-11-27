@@ -115,3 +115,26 @@ export function monthMargin(input: { revenue: number; costedRevenue: number; cos
     coveragePercent: Math.round((costedRevenue / revenue) * 100),
   };
 }
+
+
+export type DaySale = { id: string; code: string; at: Date | string; amount: number; customer: string | null; channel: string; marketplace: boolean };
+
+/** Vendas do dia: total, por canal (maior primeiro) e os 8 pedidos mais recentes. */
+export function salesOfTheDay(orders: DaySale[], marketplaceInbox: DaySale[]) {
+  const all = [...orders, ...marketplaceInbox]
+    .map((sale) => ({ ...sale, amount: Math.max(0, Number(sale.amount) || 0), at: new Date(sale.at).toISOString() }))
+    .sort((a, b) => b.at.localeCompare(a.at));
+  const byChannel = new Map<string, { channel: string; amount: number; orders: number; marketplace: boolean }>();
+  for (const sale of all) {
+    const entry = byChannel.get(sale.channel) ?? { channel: sale.channel, amount: 0, orders: 0, marketplace: sale.marketplace };
+    entry.amount += sale.amount;
+    entry.orders += 1;
+    byChannel.set(sale.channel, entry);
+  }
+  return {
+    total: Math.round(all.reduce((sum, sale) => sum + sale.amount, 0) * 100) / 100,
+    orders: all.length,
+    byChannel: [...byChannel.values()].sort((a, b) => b.amount - a.amount),
+    feed: all.slice(0, 8),
+  };
+}
