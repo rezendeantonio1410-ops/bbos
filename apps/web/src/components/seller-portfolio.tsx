@@ -177,7 +177,10 @@ export function SellerHome({ greeting, firstName }: { greeting: string; firstNam
       )}
 
       <section id="carteira" aria-labelledby="carteira-title" className="space-y-2">
-        <h2 id="carteira-title" className="px-1 text-[19px] font-bold">Minha carteira <span className="text-sm font-normal text-stone-500">· {customers.length} clientes · toque para ver mais</span></h2>
+        <div className="flex flex-wrap items-end justify-between gap-2 px-1">
+          <h2 id="carteira-title" className="text-[19px] font-bold">Minha carteira <span className="text-sm font-normal text-stone-500">· {customers.length} clientes · toque para ver mais</span></h2>
+          <Link href="/clientes?novo=1" className="inline-flex min-h-11 items-center gap-1.5 rounded-2xl border border-stone-200 bg-white px-4 text-sm font-semibold"><Plus size={16} /> Novo cliente</Link>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {customers.map((c) => {
             const open = openCustomer === c.id;

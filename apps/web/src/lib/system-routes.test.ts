@@ -141,18 +141,24 @@ test("contabilidade recebe somente áreas de consulta fiscal e financeira", () =
 });
 
 test("a tela inicial do vendedor prioriza ações comerciais amigáveis ao tablet", () => {
-  const source = readFileSync(
+  const home = readFileSync(
     join(__dirname, "../components/home-command-v3.tsx"),
     "utf8",
   );
+  const source = readFileSync(
+    join(__dirname, "../components/seller-portfolio.tsx"),
+    "utf8",
+  );
 
-  assert.match(source, /Bispo Coffees · Painel comercial/);
+  assert.match(home, /<SellerHome greeting=\{greeting\} firstName=\{firstName\} \/>/);
   assert.match(source, /Novo pedido/);
   assert.match(source, /Novo cliente/);
-  assert.match(source, /Registrar visita/);
+  assert.match(source, /Visitas/);
   assert.match(source, /Minha carteira/);
+  assert.match(source, /Como chegar lá/);
   assert.match(source, /\/pedidos\?novo=1/);
   assert.match(source, /\/clientes\?novo=1/);
+  assert.match(source, /min-h-\[52px\]/);
 });
 
 test("o login adapta a instalação entre iPhone e Android", () => {
