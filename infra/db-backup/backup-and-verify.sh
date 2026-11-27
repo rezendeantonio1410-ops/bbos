@@ -10,6 +10,39 @@
 set -eu
 : "${SOURCE_DATABASE_URL:?}" "${BACKUP_DATABASE_URL:?}"
 SRC="$SOURCE_DATABASE_URL"; DST="$BACKUP_DATABASE_URL"
+# The optional rehearsal URL is derived from a simple PostgreSQL URI. Refuse
+# ambiguous connection strings before touching either database; a query string
+# can override the database or host, and arbitrary names are unsafe SQL/URI input.
+if [ -n "${REHEARSAL_DATABASE_NAME:-}" ]; then
+  case "$REHEARSAL_DATABASE_NAME" in
+    [a-z_]*) ;;
+    *) echo "BACKUP: RECUSADO - nome de ensaio invalido"; exit 2 ;;
+  esac
+  case "$REHEARSAL_DATABASE_NAME" in
+    *[!a-z0-9_]*) echo "BACKUP: RECUSADO - nome de ensaio invalido"; exit 2 ;;
+  esac
+  if [ "${#REHEARSAL_DATABASE_NAME}" -gt 63 ]; then
+    echo "BACKUP: RECUSADO - nome de ensaio invalido"; exit 2
+  fi
+  case "$DST" in
+    *\?*|*\#*) echo "BACKUP: RECUSADO - URI de ensaio ambigua"; exit 2 ;;
+    postgres://*|postgresql://*) ;;
+    *) echo "BACKUP: RECUSADO - URI de ensaio ambigua"; exit 2 ;;
+  esac
+  # Require one explicit database path, not a missing database or nested path.
+  dst_path="${DST#*://}"
+  case "$dst_path" in
+    */*) ;;
+    *) echo "BACKUP: RECUSADO - URI de ensaio ambigua"; exit 2 ;;
+  esac
+  dst_db="${dst_path#*/}"
+  case "$dst_db" in
+    ''|*[!a-zA-Z0-9_-]*) echo "BACKUP: RECUSADO - URI de ensaio ambigua"; exit 2 ;;
+  esac
+  if [ "$dst_db" = "$REHEARSAL_DATABASE_NAME" ]; then
+    echo "BACKUP: RECUSADO - ensaio deve usar banco distinto"; exit 2
+  fi
+fi
 # Private per-run storage: concurrent jobs must never share a dump or counts.
 umask 077
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/bbos-backup.XXXXXXXX")"
