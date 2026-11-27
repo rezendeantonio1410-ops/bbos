@@ -1160,21 +1160,23 @@ export class SalesOrdersController {
       ).toUpperCase();
       const percent = Number(representative?.salesCommissionPercent ?? 0);
       const perPackage = Number(representative?.salesCommissionPerPackage ?? 0);
-      // "Sem comissão" (NONE): a liderança liberou o vendedor a vender sem
-      // comissão; o pedido é registrado sem corretor e sem comissão.
-      if (representative && mode === "NONE") {
+      // Sem comissão: regra "Sem comissão" (NONE) ou nenhuma regra
+      // configurada. O pedido é registrado sem corretor e sem comissão, em
+      // vez de bloquear a venda do vendedor (decisão da liderança, 27/11).
+      const percentPolicy = mode === "PERCENTAGE" && percent > 0 && percent <= 100;
+      const packagePolicy = mode === "PER_PACKAGE" && perPackage > 0;
+      if (representative && (mode === "NONE" || (!percentPolicy && !packagePolicy))) {
         brokerId = undefined;
         brokerCommissionMode = undefined;
         brokerCommissionPercent = 0;
         brokerCommissionPerPackage = 0;
       } else {
-        const policyIsValid =
-          representative?.brokerProfile?.active === true &&
-          ((mode === "PERCENTAGE" && percent > 0 && percent <= 100) ||
-            (mode === "PER_PACKAGE" && perPackage > 0));
-        if (!policyIsValid) {
+        if (!representative) {
+          throw new BadRequestException("Cadastro de vendedor não encontrado ou inativo. Fale com José ou Suzi.");
+        }
+        if (representative.brokerProfile?.active !== true) {
           throw new BadRequestException(
-            "A comissão deste representante ainda não foi configurada. Solicite a José ou Suzi a definição da regra (ou \"Sem comissão\") antes de registrar o pedido.",
+            "O cadastro de corretor deste representante está inativo. Peça a José ou Suzi para reativar ou mudar a regra para \"Sem comissão\".",
           );
         }
         brokerId = representative!.brokerProfile!.id;
