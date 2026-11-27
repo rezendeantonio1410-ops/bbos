@@ -557,10 +557,16 @@ function GrowthRow({ insights }: { insights: CommandInsights }) {
 }
 
 
+/** Card de hoje abre os pedidos do marketplace que mais vendeu hoje; sem marketplace, abre Pedidos. */
+function todayHref(sales: TodaySales | null) {
+  const marketplace = sales?.byChannel.find((row) => row.marketplace);
+  return marketplace ? `/vendas/marketplace?canal=${encodeURIComponent(marketplace.channel)}&periodo=today` : "/pedidos";
+}
+
 /** Vendas de hoje, ao vivo e compacto: total, canais e os 3 últimos pedidos. */
 function TodayCard({ sales, freshIds }: { sales: TodaySales | null; freshIds: Set<string> }) {
   return (
-    <Link href="/pedidos" aria-label="Vendas de hoje: abrir pedidos" aria-live="polite" className={`${card} group block p-4 transition hover:border-[var(--bbos-coffee-green)] hover:shadow-sm`}>
+    <Link href={todayHref(sales)} aria-label={`Vendas de hoje: abrir ${todayHref(sales) === "/pedidos" ? "pedidos" : "pedidos do marketplace"}`} aria-live="polite" className={`${card} group block p-4 transition hover:border-[var(--bbos-coffee-green)] hover:shadow-sm`}>
       <p className={`${label} flex items-center gap-2`}>
         Vendas de hoje
         <span aria-hidden className="relative flex size-2"><span className="absolute inline-flex size-full rounded-full bg-[var(--bbos-success)] opacity-60 motion-safe:animate-ping" /><span className="relative inline-flex size-2 rounded-full bg-[var(--bbos-success)]" /></span>
@@ -584,7 +590,7 @@ function TodayCard({ sales, freshIds }: { sales: TodaySales | null; freshIds: Se
               </ul>
             </>
           )}
-          <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">Ver pedidos →</span>
+          <span className="mt-2 inline-block text-[13px] font-bold text-[var(--bbos-coffee-green)] group-hover:underline">{todayHref(sales) === "/pedidos" ? "Ver pedidos →" : `Ver pedidos ${sales.byChannel.find((row) => row.marketplace)?.channel ?? "do marketplace"} →`}</span>
         </>
       )}
     </Link>
