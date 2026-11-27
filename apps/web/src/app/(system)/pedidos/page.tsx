@@ -27,6 +27,7 @@ import { Badge, Card } from "@bbos/ui";
 import { calculateSalesLineDiscount } from "@bbos/shared";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { OrderBillingPdfButton } from "@/components/order-billing-pdf-button";
+import { OrderDueDateChange } from "@/components/order-due-date-change";
 import { OrderPdfLink } from "@/components/order-pdf-link";
 import {
   buildCustomerOrderInsights,
@@ -5192,6 +5193,16 @@ function OrderDrawer({
                   <div className="mt-3">
                     <OrderBillingPdfButton orderId={order.id} orderNumber={order.orderNumber ?? order.code} />
                   </div>
+                  {canOperate && (
+                    <OrderDueDateChange
+                      orderId={order.id}
+                      currentDueDate={billingSummary.dueDate ?? null}
+                      onDone={async () => {
+                        await loadBillingSummary();
+                        await onChanged();
+                      }}
+                    />
+                  )}
                 </section>
               )}
             <div className="mt-5 space-y-2 sm:mt-6">
