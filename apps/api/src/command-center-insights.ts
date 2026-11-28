@@ -117,7 +117,39 @@ export function monthMargin(input: { revenue: number; costedRevenue: number; cos
 }
 
 
-export type DaySale = { id: string; code: string; at: Date | string; amount: number; customer: string | null; channel: string; marketplace: boolean };
+export type ShipState = "TO_SHIP" | "SHIPPED" | "DELIVERED";
+export type DaySale = {
+  id: string; code: string; at: Date | string; amount: number; customer: string | null; channel: string; marketplace: boolean;
+  /** "2× Caramelo Chocolate" (+ "e mais N" quando há outros itens). */
+  item?: string | null;
+  ship?: ShipState | null;
+};
+
+const SHIPPED = new Set(["INVOICED", "SHIPPED"]);
+/** Situação de envio de um pedido do BBOS pelo status. */
+export function orderShipState(status: string): ShipState {
+  if (status === "DELIVERED") return "DELIVERED";
+  return SHIPPED.has(status) ? "SHIPPED" : "TO_SHIP";
+}
+
+/** Situação de envio de um pedido de marketplace pelas etiquetas do Mercado Livre. */
+export function marketplaceShipState(tags: unknown): ShipState {
+  const list = Array.isArray(tags) ? tags.map(String) : [];
+  return list.includes("delivered") ? "DELIVERED" : "TO_SHIP";
+}
+
+/** "2× Caramelo Chocolate" a partir do primeiro item; tira "Café em grãos especial Bispo" e o peso. */
+export function itemLabel(items: Array<{ name: string; quantity: number }>) {
+  const first = items[0];
+  if (!first) return null;
+  const name = first.name
+    .replace(/caf[ée]\s+(em\s+gr[ãa]os|mo[íi]do)?\s*(especial)?\s*/i, "")
+    .replace(/^bispo\s+/i, "")
+    .replace(/\s*\d+\s*(g|kg)\b.*$/i, "")
+    .trim() || first.name;
+  const more = items.length > 1 ? ` e mais ${items.length - 1}` : "";
+  return `${first.quantity}× ${name}${more}`;
+}
 
 /** Vendas do dia: total, por canal (maior primeiro) e os 8 pedidos mais recentes. */
 export function salesOfTheDay(orders: DaySale[], marketplaceInbox: DaySale[]) {

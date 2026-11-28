@@ -112,13 +112,15 @@ export function parseGoalInput(value: string) {
   return cleaned && Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
 }
 
-export type TodaySale = { id: string; code: string; at: string; amount: number; customer: string | null; channel: string; marketplace: boolean };
+export type TodaySale = { id: string; code: string; at: string; amount: number; customer: string | null; channel: string; marketplace: boolean; item?: string | null; ship?: "TO_SHIP" | "SHIPPED" | "DELIVERED" | null };
 export type TodaySales = {
   generatedAt: string;
   total: number;
   orders: number;
   byChannel: Array<{ channel: string; amount: number; orders: number; marketplace: boolean }>;
   feed: TodaySale[];
+  /** Pedidos ainda por sair (BBOS em aberto + marketplace de hoje) e quantos passaram da data. */
+  shipping?: { toShip: number; late: number };
   marketplaceMonth: { amount: number; orders: number; byChannel: Array<{ channel: string; amount: number; orders: number }> };
 };
 

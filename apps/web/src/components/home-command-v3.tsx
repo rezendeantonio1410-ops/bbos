@@ -32,7 +32,8 @@ import {
   type SnoozeAction,
   type TodaySales,
 } from "@/lib/command-center-v6";
-import { CommandCenterToday, type Area, type TodayTask, type Vital } from "./command-center-today";
+import type { Area, TodayTask, Vital } from "./command-center-today";
+import { CentralClean } from "./central-clean";
 import { SellerToday } from "./seller-today";
 
 const kg = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
@@ -649,23 +650,26 @@ function CommandCenter({
     return snooze(task, action === "DISMISS" ? "DONE" : action);
   };
   void undoSnooze;
-  void saveGoal;
   void freshIds;
   void brief;
   void summary;
+  const cashVital = vitals.find((v) => v.key === "cash")!;
   return (
-    <CommandCenterToday
+    <CentralClean
       greeting={greeting}
       firstName={firstName}
       dateLabel={dateLabel}
       tasks={todayTasks}
-      vitals={vitals}
-      timeline={timeline}
-      glance={{ revenue: salesMonthAll, projection: salesPace(salesMonthAll).projection, previousRevenue: geo?.previousRevenue ?? 0, marginPercent: insights?.margin.marginPercent ?? null, goal: insights?.goal.salesTarget ?? null, daysLeft: Math.max(0, daysInMonth - dayOfMonth) }}
-      freshness={freshness}
-      newMenu={<NewMenu />}
-      onSnooze={onTask}
+      onAct={onTask}
+      today={today}
+      month={{ key: localNow.toISOString().slice(0, 7), revenue: salesMonthAll, previousRevenue: geo?.previousRevenue ?? 0, goal: insights?.goal.salesTarget ?? null, dayOfMonth, daysInMonth }}
+      cash={{ value: cashView?.known && cashView.fixedBufferDays ? `${cashView.fixedBufferDays} dias` : cashVital.value, note: cashView?.known ? (receivable.overdue > 0 ? `${brlTask.format(receivable.overdue)} vencidos a receber` : cashView.fixedBufferDays ? `${brlTask.format(cashView.balance)} no banco · nada vencido` : "nada vencido") : cashVital.note, href: cashVital.href ?? "/financeiro/fluxo-caixa", tone: cashVital.tone }}
+      journey={{ greenDays, roastBehindKg: pace.behindKg, late: today?.shipping?.late ?? home.overdueOrders }}
       canSeeBi={canSeeBi}
+      canSetGoal={canSeeBi}
+      onSaveGoal={saveGoal}
+      newMenu={<NewMenu />}
+      freshness={freshness}
     />
   );
 }
