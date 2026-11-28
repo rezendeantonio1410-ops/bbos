@@ -391,13 +391,12 @@ export default function UsersPage() {
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   type="password"
-                  minLength={12}
+                  minLength={8}
                   autoComplete="new-password"
                 />
               </div>
               <p className="mt-1 text-[11px] text-amber-700">
-                Use no mínimo 12 caracteres, com maiúsculas, minúsculas e
-                números. Nunca reutilize uma senha pessoal.
+                Mínimo de 8 caracteres, com letras e pelo menos um número. Nunca reutilize uma senha pessoal.
               </p>
             </Label>
           </div>
@@ -465,13 +464,13 @@ export default function UsersPage() {
                     value={resetPassword}
                     onChange={(event) => setResetPassword(event.target.value)}
                     type="password"
-                    minLength={12}
+                    minLength={8}
                     autoComplete="new-password"
                   />
                 </div>
               </Label>
               <p className="mt-2 text-xs leading-5 text-amber-700">
-                Mínimo de 12 caracteres, com maiúsculas, minúsculas e números.
+                Mínimo de 8 caracteres, com letras e pelo menos um número.
                 Ao salvar, todas as sessões anteriores desse usuário serão
                 encerradas.
               </p>

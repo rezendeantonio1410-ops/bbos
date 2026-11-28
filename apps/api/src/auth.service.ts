@@ -15,7 +15,8 @@ import {
 import { LoginAttemptLimiter } from "./auth-security";
 
 export const SESSION_COOKIE = "bbos_session";
-const SESSION_DAYS = 7;
+/** Login fica salvo no aparelho por 30 dias (tablet de campo não precisa digitar a senha toda semana). */
+export const SESSION_DAYS = 30;
 
 type SessionUser = Pick<
   User,
