@@ -5,11 +5,14 @@ import android.app.Activity;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.LocationManager;
+import android.graphics.Insets;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.WindowInsets;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.FrameLayout;
 import android.widget.TextView;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
@@ -68,7 +71,16 @@ public final class MileageActivity extends Activity {
                     reply.postMessage("{\"pending\":[],\"error\":\"Não foi possível acessar o registro no aparelho.\"}");
                 }
             });
-        setContentView(web);
+        FrameLayout layout = new FrameLayout(this);
+        layout.addView(web, new FrameLayout.LayoutParams(-1, -1));
+        if (Build.VERSION.SDK_INT >= 35) {
+            layout.setOnApplyWindowInsetsListener((view, insets) -> {
+                Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                return insets;
+            });
+        }
+        setContentView(layout);
         web.loadUrl(BuildConfig.WEB_ORIGIN + "/quilometragem");
     }
 

@@ -1,11 +1,13 @@
 package br.com.bispocoffees.mileage;
 
+import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -44,6 +46,10 @@ public final class MileageService extends Service implements LocationListener {
         try {
             if (store.active() == null) {
                 stopSelf();
+                return START_NOT_STICKY;
+            }
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                finish();
                 return START_NOT_STICKY;
             }
             startForeground(1, notification());
