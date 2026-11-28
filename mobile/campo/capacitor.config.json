@@ -1,0 +1,13 @@
+{
+  "appId": "com.bispocoffees.campo",
+  "appName": "Bispo Campo",
+  "webDir": "www",
+  "server": {
+    "url": "https://bbos-app-rc1.onrender.com/campo",
+    "cleartext": false
+  },
+  "android": {
+    "useLegacyBridge": true,
+    "backgroundColor": "#0b1f1b"
+  }
+}

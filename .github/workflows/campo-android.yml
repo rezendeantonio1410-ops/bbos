@@ -1,0 +1,75 @@
+name: Bispo Campo (Android)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [release/bbos-rc1-consolidation]
+    paths: ["mobile/campo/**", ".github/workflows/campo-android.yml"]
+  pull_request:
+    paths: ["mobile/campo/**", ".github/workflows/campo-android.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile/campo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Kit do Android (já vem na máquina do GitHub)
+        run: |
+          echo "::notice::ANDROID_HOME=${ANDROID_HOME:-vazio} java=$(java -version 2>&1 | head -1) node=$(node -v)"
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
+      - name: Instalar Capacitor e copiar plugins para o Android
+        run: |
+          echo "::notice::instalando dependências"
+          set -o pipefail
+          { npm ci --no-audit --no-fund && npx cap sync android; } 2>&1 | tee "$RUNNER_TEMP/sync.log" || { tail -n 30 "$RUNNER_TEMP/sync.log" | sed 's/^/::error::/'; exit 1; }
+      - name: Chave de assinatura
+        env:
+          KEYSTORE_B64: ${{ secrets.CAMPO_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/campo.keystore"
+            echo "CAMPO_KEYSTORE_FILE=$RUNNER_TEMP/campo.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Sem a chave CAMPO_KEYSTORE_B64: o APK sai com a chave de teste."
+          fi
+      - name: Gerar APK
+        env:
+          CAMPO_VERSION_CODE: ${{ github.run_number }}
+          CAMPO_KEYSTORE_PASSWORD: ${{ secrets.CAMPO_KEYSTORE_PASSWORD }}
+          CAMPO_KEY_ALIAS: ${{ secrets.CAMPO_KEY_ALIAS }}
+          CAMPO_KEY_PASSWORD: ${{ secrets.CAMPO_KEYSTORE_PASSWORD }}
+        working-directory: mobile/campo/android
+        run: |
+          echo "::notice::compilando ($CAMPO_VERSION_CODE)"
+          set -o pipefail
+          chmod +x gradlew
+          task=assembleDebug; [ -n "$CAMPO_KEYSTORE_FILE" ] && task=assembleRelease
+          # Em caso de erro, as últimas linhas viram anotações (legíveis pela API de checks).
+          if ! ./gradlew --no-daemon "$task" > "$RUNNER_TEMP/gradle.log" 2>&1; then
+            # Uma única anotação com o erro inteiro (o GitHub guarda só 10 por passo).
+            msg=$( (grep -A 30 "What went wrong" "$RUNNER_TEMP/gradle.log" || tail -n 40 "$RUNNER_TEMP/gradle.log") | head -n 45 | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=Gradle::$msg"
+            grep -E "^e: |error:|FAILED" "$RUNNER_TEMP/gradle.log" | head -n 20 | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g' | sed 's/^/::error title=Detalhes::/'
+            exit 1
+          fi
+          mkdir -p ../out
+          cp $(ls app/build/outputs/apk/release/*.apk app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1) ../out/bispo-campo.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bispo-campo-apk
+          path: mobile/campo/out/bispo-campo.apk
+          retention-days: 30
