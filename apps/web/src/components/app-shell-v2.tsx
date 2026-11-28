@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Logo } from "./logo";
+import { WhatsAppProvider } from "./whatsapp-sheet";
 import { UserAvatar } from "./user-avatar";
 import {
   mobileNavigationForRole,
@@ -92,6 +93,7 @@ const mobileShortLabelByHref: Record<string, string> = {
   "/atendimento": "Atendimento",
   "/por-perto": "Visitas",
   "/campo": "Meu dia",
+  "/minha-bi": "Minha BI",
   "/prospeccao": "Prospecção",
   "/pedidos": "Pedidos",
   "/estoque": "Estoque",
@@ -235,7 +237,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
     () =>
       mobileNavigationForRole(sessionUser?.role).map((item) => ({
         ...item,
-        shortLabel: mobileShortLabelByHref[item.href] ?? item.label,
+        shortLabel: item.href === "/home" && sessionUser?.role === "SALES" ? "Hoje" : (mobileShortLabelByHref[item.href] ?? item.label),
       })),
     [sessionUser?.role],
   );
@@ -651,7 +653,9 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                   <span className="hidden min-[430px]:inline">Voltar</span>
                 </Link>
               )}
-              <nav aria-label="Caminho" className="min-w-0">
+              {/* Logo oficial sempre visível no celular e no tablet (no computador ele fica no menu lateral). */}
+              <Link href="/home" aria-label="Bispo Coffees · início" className="shrink-0 lg:hidden"><Logo compact /></Link>
+              <nav aria-label="Caminho" className="hidden min-w-0 sm:block lg:block">
                 <ol className="flex min-w-0 items-center gap-1.5 text-sm">
                   {activeGroup && activeGroup !== currentLabel && (
                     <li className="hidden shrink-0 items-center gap-1.5 text-[var(--bbos-text-muted)] sm:flex">
@@ -945,7 +949,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
           )}
         </header>
         <main data-bbos-main className="p-2.5 sm:p-4 lg:p-5">
-          {children}
+          <WhatsAppProvider seller={sessionUser?.name?.split(" ")[0] ?? ""}>{children}</WhatsAppProvider>
         </main>
         <footer className="border-t px-5 py-3 text-center text-xs text-[var(--bbos-text-muted)]">
           {SYSTEM_CREATOR_CREDIT_PT}
@@ -957,7 +961,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
           aria-label="Atalhos principais"
           className="fixed bottom-[calc(.45rem_+_env(safe-area-inset-bottom))] left-1/2 z-40 grid w-[calc(100%_-_1rem)] max-w-3xl -translate-x-1/2 grid-cols-5 overflow-hidden rounded-[20px] border border-stone-200 bg-white/95 p-1 shadow-[0_12px_40px_rgba(15,23,42,.18)] backdrop-blur lg:hidden"
           style={{
-            gridTemplateColumns: `repeat(${mobileQuickLinks.length + 1}, minmax(0, 1fr))`,
+            gridTemplateColumns: `repeat(${mobileQuickLinks.length < 5 ? mobileQuickLinks.length + 1 : mobileQuickLinks.length}, minmax(0, 1fr))`,
           }}
         >
           {mobileQuickLinks.map((item) => {
@@ -987,6 +991,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+{mobileQuickLinks.length < 5 && (
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
@@ -996,6 +1001,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
             <Menu size={20} />
             <span>Menu</span>
           </button>
+          )}
         </nav>
       )}
       <CommandCenter
