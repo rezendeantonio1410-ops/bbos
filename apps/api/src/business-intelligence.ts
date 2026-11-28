@@ -186,7 +186,11 @@ export function customerInsights(rows: CustomerOrderRow[], now = new Date()) {
     .filter((c) => c.segment === "ATRASADO" || c.segment === "GRANDE_PARADO" || c.segment === "PARADO" || (c.segment === "UMA_VEZ" && c.daysSince >= 7))
     .sort((a, b) => b.priority - a.priority)
     .slice(0, 8)
-    .map(({ priority: _priority, ...rest }) => rest);
+    .map(({ priority, ...rest }) => {
+      // Internal ordering score is intentionally omitted from the response.
+      void priority;
+      return rest;
+    });
   const ranked = [...customers].sort((a, b) => b.total - a.total);
   const top = ranked.slice(0, 3).map((c) => ({ name: c.name, share: revenue > 0 ? Math.round((c.total / revenue) * 100) : 0 }));
   return {

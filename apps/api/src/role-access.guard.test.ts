@@ -659,3 +659,44 @@ test("export operators reach only the export area", () => {
   assert.equal(can("SalesOrdersController", "list"), false);
   assert.equal(can("SalesOrdersController", "create"), false);
 });
+
+test("Signa partners cannot reach internal manual approvals, goals or payment settlement", () => {
+  const guard = new RoleAccessGuard(privateReflector);
+  const internalRoutes = [
+    ["SalesOrderApprovalsController", "manualConfirm"],
+    ["SalesOrderManualPaymentsController", "confirm"],
+    ["SellerPortfolioController", "portfolio"],
+    ["SellerPortfolioController", "goals"],
+    ["SellerPortfolioController", "saveGoal"],
+    ["FinanceController", "receive"],
+    ["FinanceAssistedReconciliationController", "settle"],
+    ["ReconciliationController", "match"],
+    ["ReconciliationController", "safeAutoMatch"],
+  ] as const;
+  for (const [controller, handler] of internalRoutes) {
+    for (const role of ["PARTNER", undefined]) {
+      assert.throws(
+        () => guard.canActivate(executionContext({ controller, handler, role })),
+        ForbiddenException,
+        `${controller}.${handler} must deny ${role ?? "anonymous"}`,
+      );
+    }
+  }
+  // Positive controls: this is not a blanket denial of permitted workflows.
+  for (const [controller, handler, role] of [
+    ["PartnerPortalController", "createOrder", "PARTNER"],
+    ["SalesOrderApprovalsController", "manualConfirm", "SALES"],
+    ["SalesOrderManualPaymentsController", "confirm", "ADMIN"],
+    ["SellerPortfolioController", "portfolio", "SALES"],
+    ["SellerPortfolioController", "saveGoal", "EXECUTIVE"],
+    ["FinanceController", "receive", "FINANCE"],
+  ] as const) {
+    assert.equal(guard.canActivate(executionContext({ controller, handler, role })), true);
+  }
+  for (const handler of ["goals", "saveGoal"]) {
+    assert.throws(
+      () => guard.canActivate(executionContext({ controller: "SellerPortfolioController", handler, role: "SALES" })),
+      ForbiddenException,
+    );
+  }
+});

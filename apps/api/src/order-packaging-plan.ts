@@ -81,7 +81,6 @@ export function buildPackagingPlan(items: PackagingItemRow[], ops: PackagingOpRo
           : roasting
             ? "ROASTING"
             : "NEEDS_ROAST";
-    const shortfall = Math.max(0, requiredKg - (available[0]?.availableKg ?? 0));
     return {
       salesOrderItemId: item.salesOrderItemId,
       productVariantId: item.productVariantId,
