@@ -260,7 +260,8 @@ export function pathToGoal(portfolio: PortfolioView, month: MonthView) {
   for (const item of ranked) {
     if (picked.length >= 5) break;
     if (gap !== null && gap > 0 && sum >= gap * 1.2 && item.kind !== "CONFIRMAR") break;
-    const { rank: _rank, ...rest } = item;
+    const rest: GoalOpportunity & { rank?: unknown } = { ...item };
+    delete rest.rank;
     picked.push(rest);
     sum += item.value;
   }
