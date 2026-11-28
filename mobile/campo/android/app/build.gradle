@@ -26,11 +26,10 @@ android {
             keyAlias "androiddebugkey"
             keyPassword "android"
         }
-        release {
-            // Chave guardada nos segredos do GitHub (nunca no repositório).
-            def store = System.getenv("CAMPO_KEYSTORE_FILE")
-            if (store) {
-                storeFile file(store)
+        // Chave da loja, guardada nos segredos do GitHub (nunca no repositório).
+        if (System.getenv("CAMPO_KEYSTORE_FILE")) {
+            release {
+                storeFile file(System.getenv("CAMPO_KEYSTORE_FILE"))
                 storePassword System.getenv("CAMPO_KEYSTORE_PASSWORD")
                 keyAlias System.getenv("CAMPO_KEY_ALIAS")
                 keyPassword System.getenv("CAMPO_KEY_PASSWORD")
