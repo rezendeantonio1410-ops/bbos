@@ -94,6 +94,7 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   BiReadingController: LEADERSHIP,
   // Carteira do vendedor: o próprio vendedor e a liderança.
   SellerPortfolioController: ["ADMIN", "EXECUTIVE", "SALES"],
+  FieldController: ["ADMIN", "EXECUTIVE", "SALES"],
   SalesOrderApprovalsController: CORE,
   SalesOrderManualPaymentsController: ["ADMIN"],
   FinanceController: ACCOUNTING_WRITE,
@@ -246,6 +247,9 @@ const HANDLER_ROLE_POLICY: Readonly<
     getRules: OPERATIONS,
     getRulesForLine: OPERATIONS,
     validateSku: OPERATIONS,
+  },
+  FieldController: {
+    report: LEADERSHIP,
   },
   SellerPortfolioController: {
     portfolio: ["ADMIN", "EXECUTIVE", "SALES"],

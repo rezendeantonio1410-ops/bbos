@@ -27,6 +27,7 @@ import { RecurringExpenseController } from "./recurring-expense.controller";
 import { DirectShipmentController } from "./direct-shipment.controller";
 import { CommandCenterController } from "./command-center.controller";
 import { SellerPortfolioController } from "./seller-portfolio.controller";
+import { FieldController } from "./field.controller";
 import { BusinessIntelligenceController } from "./business-intelligence.controller";
 import { BiReadingController } from "./bi-reading.controller";
 import { SellerPortfolioService } from "./seller-portfolio.service";
@@ -139,6 +140,7 @@ import { BillingEmailService } from "./billing-email.service";
     DirectShipmentController,
     CommandCenterController,
     SellerPortfolioController,
+    FieldController,
     BusinessIntelligenceController,
     BiReadingController,
     ReceivableBoletoController,

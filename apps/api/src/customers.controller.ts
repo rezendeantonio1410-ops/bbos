@@ -1251,12 +1251,16 @@ export class CustomersController {
     }
 
     const input = parseCustomerVisitInput(body);
+    // Local da visita (opcional, enviado pelo app BBOS Campo).
+    const lat = Number(body.latitude);
+    const lng = Number(body.longitude);
+    const hasPlace = Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0);
     const visitId = randomUUID();
     await this.db.$executeRawUnsafe(
       `INSERT INTO "CustomerVisit"
         (id,"companyId","customerId","storefrontPartnerId","recordedByUserId","recordedByName",
-         "visitAt","contactName",purpose,outcome,facts,"nextAction","nextActionAt","createdAt","updatedAt")
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW(),NOW())`,
+         "visitAt","contactName",purpose,outcome,facts,"nextAction","nextActionAt",latitude,longitude,"createdAt","updatedAt")
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW(),NOW())`,
       visitId,
       actor.companyId,
       id,
@@ -1270,6 +1274,8 @@ export class CustomersController {
       input.facts,
       input.nextAction,
       input.nextActionAt,
+      hasPlace ? lat : null,
+      hasPlace ? lng : null,
     );
     return { id: visitId, ok: true };
   }
