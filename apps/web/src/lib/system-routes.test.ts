@@ -102,11 +102,12 @@ test("atalhos móveis respeitam o perfil e deixam o menu completo como saída se
     ["/home", "/por-perto", "/pedidos", "/financeiro"],
   );
   // "Por perto" is a fixed phone shortcut for every field-capable role.
-  for (const role of ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE", "SALES"])
+  for (const role of ["ADMIN", "EXECUTIVE", "INDUSTRIAL", "FINANCE"])
     assert.equal(mobileNavigationForRole(role)[1]?.href, "/por-perto", role);
+  // O vendedor abre direto "Meu dia" (BBOS Campo); "Por perto" fica na aba ao lado.
   assert.deepEqual(
     mobileNavigationForRole("SALES").map((item) => item.href),
-    ["/home", "/por-perto", "/pedidos", "/clientes"],
+    ["/home", "/campo", "/pedidos", "/clientes"],
   );
   assert.deepEqual(
     mobileNavigationForRole("ACCOUNTANT").map((item) => item.href),
@@ -313,7 +314,7 @@ test("Vendas, Prospecção e Loja e marca são áreas separadas, com no máximo 
   const area = (id: string) => bbosNavigation.find((group) => group.id === id)?.items.map((item) => item.href);
   assert.deepEqual(area("commercial"), ["/pedidos", "/clientes"]);
   assert.deepEqual(area("export"), ["/exportacoes", "/exportacoes/clientes", "/exportacoes/amostras", "/exportacoes/contratos"]);
-  assert.deepEqual(area("prospecting"), ["/prospeccao", "/atendimento", "/por-perto"]);
+  assert.deepEqual(area("prospecting"), ["/prospeccao", "/atendimento", "/campo", "/por-perto"]);
   assert.deepEqual(area("brand"), ["/commerce", "/commerce/marketplaces", "/commerce/midia"]);
   for (const group of bbosNavigation) assert.ok(group.items.length <= 5, group.label);
   const sales = navigationForRole("SALES").map((group) => group.id);

@@ -91,6 +91,7 @@ const mobileShortLabelByHref: Record<string, string> = {
   "/clientes": "Clientes",
   "/atendimento": "Atendimento",
   "/por-perto": "Visitas",
+  "/campo": "Meu dia",
   "/prospeccao": "Prospecção",
   "/pedidos": "Pedidos",
   "/estoque": "Estoque",

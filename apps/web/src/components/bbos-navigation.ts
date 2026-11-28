@@ -19,6 +19,7 @@ import {
   MapPinned,
   PackageCheck,
   PackageOpen,
+  Navigation,
   Route,
   FileInput,
   Settings,
@@ -223,6 +224,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         icon: ClipboardList,
         roles: ["ADMIN", "EXECUTIVE", "SALES"],
         keywords: ["visita", "relato", "vendedor", "follow-up"],
+      },
+      {
+        href: "/campo",
+        label: "Meu dia",
+        description: "Iniciar o dia, km rodados e rota sugerida",
+        icon: Navigation,
+        roles: ["ADMIN", "EXECUTIVE", "SALES"],
+        keywords: ["campo", "km", "quilometro", "rota", "gps", "dia", "rodado"],
       },
       {
         href: "/por-perto",
@@ -441,6 +450,14 @@ export const bbosNavigation: BbosNavGroup[] = [
         keywords: ["faturamento", "receita"],
       },
       {
+        href: "/vendas/campo",
+        label: "Equipe em campo",
+        description: "Km rodados, tempo com clientes e venda por km",
+        icon: Route,
+        roles: LEADERSHIP,
+        keywords: ["campo", "km", "quilometro", "rota", "vendedor", "gps"],
+      },
+      {
         href: "/bi",
         label: "Inteligência",
         description: "Diagnóstico, previsão e evidências",
@@ -469,7 +486,7 @@ const mobileRoutePriority: Partial<Record<BbosRole, string[]>> = {
   INDUSTRIAL: ["/home", "/por-perto", "/producao", "/estoque"],
   FINANCE: ["/home", "/por-perto", "/pedidos", "/financeiro"],
   ACCOUNTANT: ["/financeiro", "/notas-entrada", "/custos", "/clientes"],
-  SALES: ["/home", "/por-perto", "/pedidos", "/clientes"],
+  SALES: ["/home", "/campo", "/pedidos", "/clientes"],
   MARKETPLACE_OPERATOR: ["/commerce/marketplaces"],
   EXPORT_OPERATOR: ["/exportacoes", "/exportacoes/amostras", "/exportacoes/clientes", "/exportacoes/contratos"],
 };

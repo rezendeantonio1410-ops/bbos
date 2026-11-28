@@ -8,6 +8,7 @@ export const protectedSystemPrefixes = [
   "/clientes",
   "/atendimento",
   "/por-perto",
+  "/campo",
   "/prospeccao",
   "/recebimento",
   "/compras-cafe-verde",
