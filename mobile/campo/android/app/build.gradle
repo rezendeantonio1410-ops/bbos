@@ -8,8 +8,9 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         // O GitHub Actions passa o número da execução, para cada APK novo instalar por cima do anterior.
-        versionCode (System.getenv("CAMPO_VERSION_CODE") ?: "1").toInteger()
-        versionName "1.0." + (System.getenv("CAMPO_VERSION_CODE") ?: "0")
+        def campoBuild = System.getenv("CAMPO_VERSION_CODE") ?: "1"
+        versionCode = Integer.parseInt(campoBuild)
+        versionName = "1.0." + campoBuild
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
