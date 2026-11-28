@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Patch, Post, Req, Res } from "@nestjs/common";
-import { AuthService, SESSION_COOKIE } from "./auth.service";
+import { AuthService, SESSION_COOKIE, SESSION_DAYS } from "./auth.service";
 import { Public } from "./auth.guard";
 
 @Controller("auth")
@@ -10,7 +10,7 @@ export class AuthController {
   @Public()
   async login(@Body() body: { email?: string; password?: string }, @Req() request: any, @Res({ passthrough: true }) response: any) {
     const result = await this.auth.login(body.email ?? "", body.password ?? "", request.ip ?? request.socket?.remoteAddress ?? "unknown");
-    response.cookie(SESSION_COOKIE, result.token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: 7 * 86400000, path: "/" });
+    response.cookie(SESSION_COOKIE, result.token, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", maxAge: SESSION_DAYS * 86400000, path: "/" });
     return { user: result.user };
   }
 

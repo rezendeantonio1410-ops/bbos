@@ -592,14 +592,13 @@ export default function StorefrontPartnersPage() {
                 <input
                   name="password"
                   type="password"
-                  minLength={12}
+                  minLength={8}
                   required
                   autoComplete="new-password"
                 />
               </Field>
               <p className="text-[11px] leading-5 text-stone-500">
-                Use ao menos 12 caracteres, com maiúsculas, minúsculas e
-                números. Compartilhe a senha diretamente com o parceiro.
+                Mínimo de 8 caracteres, com letras e pelo menos um número. Compartilhe a senha diretamente com o parceiro.
               </p>
               <div className="flex justify-end gap-2">
                 <button
