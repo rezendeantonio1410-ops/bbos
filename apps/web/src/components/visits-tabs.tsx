@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ClipboardList, LocateFixed, MapPinned } from "lucide-react";
+import { ClipboardList, LocateFixed, MapPinned, Navigation } from "lucide-react";
 
 const TABS = [
+  { href: "/campo", label: "Meu dia", icon: Navigation },
   { href: "/por-perto", label: "Por perto", icon: LocateFixed },
   { href: "/atendimento", label: "Atendimento", icon: ClipboardList },
   { href: "/prospeccao", label: "Prospecção", icon: MapPinned },
@@ -14,7 +15,7 @@ const TABS = [
 export function VisitsTabs() {
   const pathname = usePathname();
   return (
-    <nav aria-label="Visitas" className="mb-4 grid grid-cols-3 gap-1 rounded-2xl border border-stone-200 bg-white p-1 shadow-sm">
+    <nav aria-label="Visitas" className="mb-4 grid grid-cols-4 gap-1 rounded-2xl border border-stone-200 bg-white p-1 shadow-sm">
       {TABS.map(({ href, label, icon: Icon }) => {
         const active = pathname === href || pathname.startsWith(`${href}/`);
         return (
