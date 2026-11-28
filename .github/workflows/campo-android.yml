@@ -27,9 +27,13 @@ jobs:
         with:
           distribution: temurin
           java-version: 21
-      - uses: android-actions/setup-android@v3
+      - name: Kit do Android (já vem na máquina do GitHub)
+        run: |
+          echo "::notice::ANDROID_HOME=${ANDROID_HOME:-vazio} java=$(java -version 2>&1 | head -1) node=$(node -v)"
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
       - name: Instalar Capacitor e copiar plugins para o Android
         run: |
+          echo "::notice::instalando dependências"
           set -o pipefail
           { npm ci --no-audit --no-fund && npx cap sync android; } 2>&1 | tee "$RUNNER_TEMP/sync.log" || { tail -n 30 "$RUNNER_TEMP/sync.log" | sed 's/^/::error::/'; exit 1; }
       - name: Chave de assinatura
@@ -50,6 +54,7 @@ jobs:
           CAMPO_KEY_PASSWORD: ${{ secrets.CAMPO_KEYSTORE_PASSWORD }}
         working-directory: mobile/campo/android
         run: |
+          echo "::notice::compilando ($CAMPO_VERSION_CODE)"
           set -o pipefail
           chmod +x gradlew
           task=assembleDebug; [ -n "$CAMPO_KEYSTORE_FILE" ] && task=assembleRelease
