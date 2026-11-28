@@ -122,7 +122,7 @@ export function BiPanels({ tab, days }: { tab: "vendas" | "caixa" | "operacao"; 
               ))}
             </div>
           </Card>
-          <Card title="Por canal" help={`participação nos últimos ${data.period.days === 365 ? "12 meses" : `${data.period.days} dias`}`}>
+          <Card title="Por grupo de venda" help={`Signa (parceira B2B) e o que a Bispo trabalha, pelo tipo de cliente · últimos ${data.period.days === 365 ? "12 meses" : `${data.period.days} dias`}`}>
             <Bars rows={s.channels.map((c) => ({ label: c.name, value: c.revenue, note: `${channelTotal ? Math.round((c.revenue / channelTotal) * 100) : 0}% · ${c.orders} ped.` }))} />
           </Card>
         </div>

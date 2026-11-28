@@ -1,5 +1,5 @@
 import { prisma } from "@bbos/database";
-import { normalizeCustomerPhone } from "@bbos/shared";
+import { normalizeCustomerPhone, normalizeCustomerSegment } from "@bbos/shared";
 import {
   BadRequestException,
   Body,
@@ -1349,7 +1349,7 @@ export class CustomersController {
         fiscal.countryCode,
         fiscal.countryName,
         fiscal.foreignTaxId || null,
-        optionalText(body.segment),
+        normalizeCustomerSegment(optionalText(body.segment)) ?? optionalText(body.segment),
         optionalText(body.email),
         internationalPhone(body.phone),
         fiscal.postalCode,
@@ -1669,7 +1669,7 @@ export class CustomersController {
         fiscal.foreignTaxId || null,
         body.segment === undefined
           ? current.segment
-          : body.segment?.trim() || null,
+          : normalizeCustomerSegment(body.segment) ?? (body.segment?.trim() || null),
         body.email === undefined ? current.email : body.email?.trim() || null,
         body.phone === undefined
           ? current.phone

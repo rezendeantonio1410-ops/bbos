@@ -6,6 +6,7 @@ export * from "./system-identity.js";
 export * from "./storefront-catalog.js";
 export * from "./sales-line-discount.js";
 export * from "./tax-id.js";
+export * from "./customer-segment.js";
 export type PerformanceStatus = "on-track" | "attention" | "off-track";
 
 export type ExecutiveMetric = {

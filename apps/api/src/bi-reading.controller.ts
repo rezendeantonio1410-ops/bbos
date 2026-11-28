@@ -2,6 +2,7 @@ import { BadRequestException, Body, Controller, Get, Header, Put, Query, Req, Un
 import { prisma } from "@bbos/database";
 import type { Request } from "express";
 import { AuthService } from "./auth.service";
+import { groupSales } from "./sales-group";
 import { customerInsights, marginBreakdown, type CoffeeCost } from "./business-intelligence";
 import { loadCostContext, loadCustomerOrders, loadSaleItems, NOT_INTERNAL, type DatedSaleItemRow } from "./bi-data";
 import {
@@ -303,17 +304,22 @@ export class BiReadingController {
             AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=$2 GROUP BY 1 ORDER BY 1`,
         companyId, sixMonths,
       ).catch(() => []),
-      db.$queryRawUnsafe<Array<{ name: string; revenue: number; orders: number }>>(
-        `SELECT COALESCE(ch.name,'Direto') AS name,SUM(o."totalAmount")::float AS revenue,COUNT(*)::int AS orders
-           FROM "SalesOrder" o LEFT JOIN "SalesChannel" ch ON ch.id=o."salesChannelId"
+      db.$queryRawUnsafe<Array<{ segment: string | null; partnerB2B: boolean; webStore: boolean; marketplace: boolean; revenue: number; orders: number }>>(
+        `SELECT c.segment,
+                (EXISTS (SELECT 1 FROM "StorefrontPartnerCustomer" l JOIN "User" pu ON pu."storefrontPartnerId"=l."partnerId"
+                          WHERE l."customerId"=o."customerId" AND pu.role::text='PARTNER')
+                 OR EXISTS (SELECT 1 FROM "User" pu WHERE pu."storefrontPartnerId"=o."createdByStorefrontPartnerId" AND pu.role::text='PARTNER')) AS "partnerB2B",
+                (COALESCE(o."orderNumber",'') LIKE 'WEB-%') AS "webStore", false AS marketplace,
+                SUM(o."totalAmount")::float AS revenue,COUNT(*)::int AS orders
+           FROM "SalesOrder" o JOIN "Customer" c ON c.id=o."customerId"
           WHERE o."companyId"=$1 AND o."orderType"='COMMERCIAL' AND o.status::text<>'CANCELLED' AND o."orderedAt">=$2 AND ${NOT_INTERNAL}
-          GROUP BY 1
+          GROUP BY 1,2,3
          UNION ALL
-         SELECT ch.name,SUM(COALESCE(moi."grossAmount",0))::float,COUNT(*)::int
-           FROM "MarketplaceOrderInbox" moi JOIN "SalesChannel" ch ON ch.id=moi."salesChannelId"
+         SELECT NULL,false,false,true,SUM(COALESCE(moi."grossAmount",0))::float,COUNT(*)::int
+           FROM "MarketplaceOrderInbox" moi
           WHERE moi."companyId"=$1 AND moi."salesOrderId" IS NULL
             AND LOWER(COALESCE(moi."externalStatus",'')) NOT IN ('cancelled','canceled','cancelado')
-            AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=$2 GROUP BY ch.name`,
+            AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=$2`,
         companyId, since,
       ),
       db.$queryRawUnsafe<Array<{ city: string | null; state: string | null; customerId: string; amount: number }>>(
@@ -434,7 +440,7 @@ export class BiReadingController {
           orders: (months.find((m) => m.month === month)?.orders ?? 0) + (mpMonths.find((m) => m.month === month)?.orders ?? 0),
           clients: months.find((m) => m.month === month)?.clients ?? 0,
         })),
-        channels: channels.map((c) => ({ name: c.name, revenue: Math.round(c.revenue), orders: c.orders })).sort((a, b) => b.revenue - a.revenue),
+        channels: groupSales(channels).map((c) => ({ name: c.name, revenue: Math.round(c.revenue), orders: c.orders })),
         cities: [...cityMap.values()].map((c) => ({ name: c.name, revenue: Math.round(c.revenue), clients: c.clients.size })).sort((a, b) => b.revenue - a.revenue).slice(0, 8),
         weekdays: WEEKDAYS.map((label, dow) => ({ label, amount: Math.round(weekdays.find((w) => w.dow === dow)?.amount ?? 0), orders: weekdays.find((w) => w.dow === dow)?.orders ?? 0 })),
         sellers: sellers.map((s) => ({ name: s.name, revenue: Math.round(s.revenue), orders: s.orders })),

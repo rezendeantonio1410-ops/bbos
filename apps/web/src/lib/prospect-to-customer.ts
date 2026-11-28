@@ -1,3 +1,4 @@
+import { normalizeCustomerSegment } from "@bbos/shared";
 // Prospect → cliente: o que a visita já levantou vira o cadastro do cliente,
 // sem digitar de novo. O pedido de crédito sai junto, se o vendedor quiser.
 
