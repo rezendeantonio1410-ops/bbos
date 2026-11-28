@@ -107,7 +107,7 @@ test("atalhos móveis respeitam o perfil e deixam o menu completo como saída se
   // O vendedor abre direto "Meu dia" (BBOS Campo); "Por perto" fica na aba ao lado.
   assert.deepEqual(
     mobileNavigationForRole("SALES").map((item) => item.href),
-    ["/home", "/campo", "/pedidos", "/clientes"],
+    ["/home", "/campo", "/pedidos", "/clientes", "/minha-bi"],
   );
   assert.deepEqual(
     mobileNavigationForRole("ACCOUNTANT").map((item) => item.href),
@@ -142,24 +142,25 @@ test("contabilidade recebe somente áreas de consulta fiscal e financeira", () =
 });
 
 test("a tela inicial do vendedor prioriza ações comerciais amigáveis ao tablet", () => {
-  const home = readFileSync(
-    join(__dirname, "../components/home-command-v3.tsx"),
-    "utf8",
-  );
-  const source = readFileSync(
-    join(__dirname, "../components/seller-portfolio.tsx"),
-    "utf8",
-  );
+  const home = readFileSync(join(__dirname, "../components/home-command-v3.tsx"), "utf8");
+  const source = readFileSync(join(__dirname, "../components/seller-today.tsx"), "utf8");
+  assert.match(home, /<SellerToday greeting=\{greeting\} firstName=\{firstName\} \/>/);
+  assert.match(source, /Vendido/);
+  assert.match(source, /Iniciar dia/);
+  assert.match(source, /href="\/campo"/);
+  assert.match(source, /\/pedidos\?novo=1&cliente=/);
+  assert.match(source, /<WhatsButton/);
+  assert.match(source, /Sua carteira/);
+  assert.match(source, /Próximo melhor passo/);
+  assert.match(source, /min-h-11/);
+});
 
-  assert.match(home, /<SellerHome greeting=\{greeting\} firstName=\{firstName\} \/>/);
-  assert.match(source, /Novo pedido/);
-  assert.match(source, /Novo cliente/);
-  assert.match(source, /Visitas/);
-  assert.match(source, /Minha carteira/);
-  assert.match(source, /Como chegar lá/);
-  assert.match(source, /\/pedidos\?novo=1/);
-  assert.match(source, /\/clientes\?novo=1/);
-  assert.match(source, /min-h-\[52px\]/);
+test("Minha BI só para o vendedor e WhatsApp disponível em todas as telas", () => {
+  const shell = readFileSync(join(__dirname, "../components/app-shell-v2.tsx"), "utf8");
+  assert.match(shell, /<WhatsAppProvider seller=/);
+  assert.match(shell, /<Logo compact \/>/);
+  const bi = bbosNavigation.flatMap((g) => g.items).find((i) => i.href === "/minha-bi");
+  assert.deepEqual(bi?.roles, ["SALES"]);
 });
 
 test("o login adapta a instalação entre iPhone e Android", () => {
@@ -312,7 +313,7 @@ test("menu: cada área tem ícone próprio e contadores vêm das notificações 
 
 test("Vendas, Prospecção e Loja e marca são áreas separadas, com no máximo 4 itens", () => {
   const area = (id: string) => bbosNavigation.find((group) => group.id === id)?.items.map((item) => item.href);
-  assert.deepEqual(area("commercial"), ["/pedidos", "/clientes"]);
+  assert.deepEqual(area("commercial"), ["/pedidos", "/clientes", "/minha-bi"]);
   assert.deepEqual(area("export"), ["/exportacoes", "/exportacoes/clientes", "/exportacoes/amostras", "/exportacoes/contratos"]);
   assert.deepEqual(area("prospecting"), ["/prospeccao", "/atendimento", "/campo", "/por-perto"]);
   assert.deepEqual(area("brand"), ["/commerce", "/commerce/marketplaces", "/commerce/midia"]);

@@ -6,6 +6,7 @@ import { AuthService } from "./auth.service";
 import { salesPortfolioPartnerId } from "./sales-portfolio";
 import { SellerPortfolioService } from "./seller-portfolio.service";
 import { distanceKm } from "./nearby";
+import { buildSellerBi, buildSellerHome, type BiDay, type HomeCustomer, type HomeItem, type HomeOrder, type HomeReceivable } from "./seller-home";
 import { FIELD_CONSENT_VERSION, daySummary, dayInsights, parseDayAction, parsePoints, placeHere, type GpsPoint, type Place } from "./field-day";
 
 const DAY = 86_400_000;
@@ -283,5 +284,119 @@ export class FieldController {
       totals: { ...totals, km: Math.round(totals.km * 10) / 10, revenuePerKm: totals.km > 0 ? Math.round(totals.revenue / totals.km) : null, kmPerVisit: totals.visits ? Math.round((totals.km / totals.visits) * 10) / 10 : null },
       days,
     };
+  }
+
+  /** Carteira do vendedor (SALES): clientes, pedidos, itens e contas a receber. */
+  private async sellerData(companyId: string, partnerId: string, since: Date) {
+    const customers = await this.db.$queryRawUnsafe<HomeCustomer[]>(
+      `SELECT c.id, COALESCE(NULLIF(c."tradeName",''),c.name) AS name, c.city, c.phone
+         FROM "StorefrontPartnerCustomer" link JOIN "Customer" c ON c.id=link."customerId"
+        WHERE link."partnerId"=$1 AND c."companyId"=$2 AND c.active=true`,
+      partnerId, companyId,
+    );
+    const ids = customers.map((c) => c.id);
+    if (!ids.length) return { customers, orders: [] as HomeOrder[], items: [] as HomeItem[], receivables: [] as HomeReceivable[] };
+    const [orders, receivables] = await Promise.all([
+      this.db.$queryRawUnsafe<HomeOrder[]>(
+        `SELECT o.id, o."orderNumber" AS number, o."customerId", COALESCE(NULLIF(c."tradeName",''),c.name) AS "customerName", o.status::text AS status,
+                o."totalAmount"::float AS total, COALESCE(o."orderDate",o."orderedAt",o."createdAt") AS "orderDate", o."expectedDeliveryDate"
+           FROM "SalesOrder" o JOIN "Customer" c ON c.id=o."customerId"
+          WHERE o."companyId"=$1 AND o."customerId"=ANY($2::text[]) AND o."orderType"='COMMERCIAL'
+            AND o.status::text NOT IN ('DRAFT','CANCELLED') AND COALESCE(o."orderDate",o."orderedAt",o."createdAt")>=$3`,
+        companyId, ids, since,
+      ),
+      this.db.$queryRawUnsafe<HomeReceivable[]>(
+        `SELECT r."salesOrderId" AS "orderId", r."customerId", COALESCE(r."openAmount",r.amount)::float AS amount, r."dueDate", r.status::text AS status
+           FROM "AccountsReceivable" r
+          WHERE r."companyId"=$1 AND r."customerId"=ANY($2::text[]) AND r.status::text IN ('OPEN','PARTIALLY_PAID','OVERDUE')`,
+        companyId, ids,
+      ),
+    ]);
+    const items = orders.length
+      ? await this.db.$queryRawUnsafe<HomeItem[]>(
+          `SELECT i."salesOrderId" AS "orderId", i."productName", i."totalAmount"::float AS amount,
+                  (COALESCE(v."netWeightGrams",0)*i.quantity/1000.0)::float AS kg
+             FROM "SalesOrderItem" i LEFT JOIN "ProductVariant" v ON v.id=i."productVariantId"
+            WHERE i."salesOrderId"=ANY($1::text[])`,
+          orders.map((o) => o.id),
+        )
+      : [];
+    return {
+      customers,
+      orders: orders.map((o) => ({ ...o, orderDate: new Date(o.orderDate), expectedDeliveryDate: o.expectedDeliveryDate ? new Date(o.expectedDeliveryDate) : null })),
+      items,
+      receivables: receivables.map((r) => ({ ...r, dueDate: new Date(r.dueDate) })),
+    };
+  }
+
+  private sellerPartner(actor: { role: unknown; storefrontPartnerId?: string | null }) {
+    const partnerId = salesPortfolioPartnerId(actor as Parameters<typeof salesPortfolioPartnerId>[0]);
+    if (!partnerId) throw new ForbiddenException("Disponível para o vendedor com carteira.");
+    return partnerId;
+  }
+
+  /** Tela Hoje do vendedor: semana, mês, cafés, hábitos e o que pede uma mensagem ao cliente. */
+  @Get("home")
+  @Header("Cache-Control", "private, no-store")
+  async home(@Req() req: Request) {
+    const actor = await this.actor(req);
+    const partnerId = this.sellerPartner(actor);
+    const now = new Date();
+    const data = await this.sellerData(actor.companyId, partnerId, new Date(now.getTime() - 120 * DAY));
+    const monthStart = new Date(Date.UTC(new Date(now.getTime() - 3 * 3_600_000).getUTCFullYear(), new Date(now.getTime() - 3 * 3_600_000).getUTCMonth(), 1, 3));
+    const visits = data.customers.length
+      ? await this.db.$queryRawUnsafe<Array<{ n: number }>>(
+          `SELECT COUNT(*)::int AS n FROM "CustomerVisit" WHERE "companyId"=$1 AND "customerId"=ANY($2::text[]) AND "visitAt">=$3`,
+          actor.companyId, data.customers.map((c) => c.id), monthStart,
+        )
+      : [{ n: 0 }];
+    return buildSellerHome({ ...data, visitsThisMonth: visits[0]?.n ?? 0, now });
+  }
+
+  /** Minha BI: venda, kg e tempo investido por cliente (só o próprio vendedor vê). */
+  @Get("bi")
+  @Header("Cache-Control", "private, no-store")
+  async bi(@Req() req: Request, @Query("days") daysParam?: string) {
+    const actor = await this.actor(req);
+    const partnerId = this.sellerPartner(actor);
+    const now = new Date();
+    const span = [7, 30, 90].includes(Number(daysParam)) ? Number(daysParam) : 30;
+    const from = new Date(saoPauloDayStart(now).getTime() - (span - 1) * DAY);
+    const data = await this.sellerData(actor.companyId, partnerId, new Date(from.getTime() - 120 * DAY));
+    const dayRows = await this.db.$queryRawUnsafe<DayRow[]>(
+      `SELECT id,"userId","userName",status,"startedAt","endedAt","pausedAt","pausedMinutes"::float AS "pausedMinutes",km::float AS km,"consentVersion"
+         FROM "FieldDay" WHERE "companyId"=$1 AND "userId"=$2 AND "startedAt">=$3 ORDER BY "startedAt"`,
+      actor.companyId, actor.id, from,
+    );
+    const places = dayRows.length ? await this.places(actor.companyId) : [];
+    const days: BiDay[] = [];
+    for (const day of dayRows) {
+      const { summary } = await this.summarize(actor.companyId, day, places, now);
+      days.push({ stops: summary.stops, customerMinutes: summary.customerMinutes, drivingMinutes: summary.drivingMinutes, stoppedMinutes: summary.stoppedMinutes, pauseMinutes: summary.pauseMinutes, totalMinutes: summary.totalMinutes, km: summary.km });
+    }
+    return { span, ...buildSellerBi({ ...data, days, from, now }) };
+  }
+
+  /** Registra que o vendedor abriu o WhatsApp para o cliente (histórico e relatórios). */
+  @Post("message")
+  async message(@Req() req: Request, @Body() body: { customerId?: unknown; kind?: unknown; orderNumber?: unknown }) {
+    const actor = await this.actor(req);
+    const customerId = String(body?.customerId ?? "").trim();
+    const kind = String(body?.kind ?? "FREE").trim().toUpperCase().slice(0, 30);
+    if (!customerId) throw new BadRequestException("Cliente não informado.");
+    const partnerId = salesPortfolioPartnerId(actor);
+    const allowed = await this.db.$queryRawUnsafe<Array<{ id: string }>>(
+      partnerId
+        ? `SELECT c.id FROM "Customer" c JOIN "StorefrontPartnerCustomer" l ON l."customerId"=c.id WHERE c.id=$1 AND c."companyId"=$2 AND l."partnerId"=$3`
+        : `SELECT c.id FROM "Customer" c WHERE c.id=$1 AND c."companyId"=$2`,
+      ...(partnerId ? [customerId, actor.companyId, partnerId] : [customerId, actor.companyId]),
+    );
+    if (!allowed.length) throw new ForbiddenException("Cliente fora da sua carteira.");
+    await this.db.$executeRawUnsafe(
+      `INSERT INTO "CustomerMessageLog" (id,"companyId","customerId","userId","userName",channel,kind,"orderNumber","createdAt")
+       VALUES ($1,$2,$3,$4,$5,'WHATSAPP',$6,$7,NOW())`,
+      randomUUID(), actor.companyId, customerId, actor.id, actor.name ?? null, kind, body?.orderNumber ? String(body.orderNumber).slice(0, 40) : null,
+    );
+    return { ok: true };
   }
 }

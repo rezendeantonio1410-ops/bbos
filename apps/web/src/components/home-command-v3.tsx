@@ -33,7 +33,7 @@ import {
   type TodaySales,
 } from "@/lib/command-center-v6";
 import { CommandCenterToday, type Area, type TodayTask, type Vital } from "./command-center-today";
-import { SellerHome } from "./seller-portfolio";
+import { SellerToday } from "./seller-today";
 
 const kg = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
 
@@ -265,7 +265,7 @@ export function HomeCommandV3() {
 
   if (loaded && isSales) {
     return (
-      <SellerHome greeting={greeting} firstName={firstName} />
+      <SellerToday greeting={greeting} firstName={firstName} />
     );
   }
 
