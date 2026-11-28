@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { MapPin, Play, Square } from "lucide-react";
 import { fetchSessionIdentity, getApiRoot } from "@/lib/auth-session";
 
 type Trip = {
@@ -31,7 +32,7 @@ const reportTime = new Intl.DateTimeFormat("pt-BR", {
   timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit",
 });
 const km = (meters: number) => `${(meters / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km`;
-const button = "rounded-lg bg-forest-800 px-4 py-2 text-sm font-medium text-white disabled:opacity-50";
+const button = "flex min-h-14 w-full items-center justify-center gap-3 rounded-xl px-4 text-base font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 disabled:opacity-50";
 
 export default function MileagePage() {
   const [owner, setOwner] = useState("");
@@ -135,28 +136,49 @@ export default function MileagePage() {
   return (
     <div className="mx-auto max-w-5xl space-y-6">
       <h1 className="text-2xl font-semibold">Quilometragem</h1>
-      <section className="space-y-3 rounded-xl border bg-white p-5">
-        <h2 className="font-semibold">Percurso</h2>
+      <section className="max-w-lg space-y-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex items-center gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-forest-50 text-forest-800">
+            <MapPin size={22} aria-hidden="true" />
+          </span>
+          <div>
+            <h2 className="font-semibold">Percurso</h2>
+            <p className="text-sm text-stone-600">{active ? "Em andamento" : "Nenhum percurso ativo"}</p>
+          </div>
+        </div>
         {!bridge && <p className="text-sm text-stone-600">Use o app Android do BBOS para registrar um percurso com a tela bloqueada.</p>}
         {bridge && !active && (
-          <form className="flex flex-wrap items-end gap-3" onSubmit={event => {
+          <form className="grid gap-4" onSubmit={event => {
             event.preventDefault();
             bridge.postMessage(JSON.stringify({ action: "start", owner, vehicle: vehicle.trim() }));
           }}>
-            <label className="grid gap-1 text-sm">Veículo
+            <label className="grid gap-1.5 text-sm font-medium">Veículo
               <input required maxLength={80} value={vehicle} onChange={event => setVehicle(event.target.value)}
-                placeholder="Placa ou nome do veículo" className="rounded-lg border px-3 py-2" />
+                placeholder="Placa ou nome do veículo" className="min-h-12 rounded-xl border border-stone-300 px-3 text-base font-normal" />
             </label>
-            <button className={button} disabled={!ownerReady || !owner || !vehicle.trim()}>Iniciar percurso</button>
+            <button className={`${button} bg-forest-800 shadow-sm hover:bg-forest-900`} disabled={!ownerReady || !owner || !vehicle.trim()}>
+              <Play size={20} fill="currentColor" aria-hidden="true" /> Iniciar percurso
+            </button>
           </form>
         )}
         {bridge && active && (
-          <div className="space-y-2">
-            <p role="status" className="text-sm">
-              {ownTrip ? `${active.hasFix ? "GPS ativo" : "Aguardando sinal do GPS"} · ${active.vehicle} · ${km(active.distanceMeters)}`
-                : "Há um percurso ativo de outra conta neste aparelho."}
-            </p>
-            {ownTrip && <button className={button} onClick={() => bridge.postMessage(JSON.stringify({ action: "stop", owner }))}>Encerrar percurso</button>}
+          <div className="space-y-4">
+            {ownTrip ? (
+              <>
+                <div className="rounded-xl bg-forest-50 p-4 text-forest-950">
+                  <p role="status" className="flex items-center gap-2 text-sm font-semibold">
+                    <span aria-hidden="true" className={`size-2 rounded-full ${active.hasFix ? "bg-forest-700" : "bg-amber-500"}`} />
+                    {active.hasFix ? "GPS ativo" : "Aguardando sinal do GPS"}
+                  </p>
+                  <p className="mt-2 text-4xl font-semibold tabular-nums tracking-tight">{km(active.distanceMeters)}</p>
+                  <p className="mt-1 text-sm text-stone-700">{active.vehicle}</p>
+                </div>
+                <button className={`${button} bg-red-800 shadow-sm hover:bg-red-900`}
+                  onClick={() => bridge.postMessage(JSON.stringify({ action: "stop", owner }))}>
+                  <Square size={18} fill="currentColor" aria-hidden="true" /> Encerrar percurso
+                </button>
+              </>
+            ) : <p role="status" className="text-sm text-stone-600">Há um percurso ativo de outra conta neste aparelho.</p>}
           </div>
         )}
         {(device.error || syncError) && <p role="status" className="text-sm text-amber-800">{device.error || syncError}</p>}
