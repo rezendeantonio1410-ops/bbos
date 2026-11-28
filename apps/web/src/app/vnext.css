@@ -255,13 +255,17 @@
     -webkit-overflow-scrolling: touch;
   }
 
+  /* A barra já fica acima da área do sistema (bottom: … + safe-area); somar o
+     inset de novo aqui deixava um espaço vazio grande no tablet Android. */
   .bbos-system-vnext [data-bbos-mobile-dock] {
-    padding-bottom: max(0.25rem, env(safe-area-inset-bottom));
+    padding-bottom: 0.25rem;
   }
 
+  /* Assistente acima da barra, sem encostar nela nem nos botões dos cartões. */
   .bbos-system-vnext ~ .bbos-ai-fab {
     right: 0.75rem;
-    bottom: calc(5.35rem + env(safe-area-inset-bottom));
+    bottom: calc(6.1rem + env(safe-area-inset-bottom));
+    opacity: 0.92;
   }
 }
 
