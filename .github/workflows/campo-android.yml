@@ -59,7 +59,13 @@ jobs:
           chmod +x gradlew
           task=assembleDebug; [ -n "$CAMPO_KEYSTORE_FILE" ] && task=assembleRelease
           # Em caso de erro, as últimas linhas viram anotações (legíveis pela API de checks).
-          ./gradlew --no-daemon "$task" 2>&1 | tee "$RUNNER_TEMP/gradle.log" || { grep -v -E "^\s*$|Download|Downloading" "$RUNNER_TEMP/gradle.log" | tail -n 45 | sed 's/^/::error::/'; exit 1; }
+          if ! ./gradlew --no-daemon "$task" > "$RUNNER_TEMP/gradle.log" 2>&1; then
+            # Uma única anotação com o erro inteiro (o GitHub guarda só 10 por passo).
+            msg=$( (grep -A 30 "What went wrong" "$RUNNER_TEMP/gradle.log" || tail -n 40 "$RUNNER_TEMP/gradle.log") | head -n 45 | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g')
+            echo "::error title=Gradle::$msg"
+            grep -E "^e: |error:|FAILED" "$RUNNER_TEMP/gradle.log" | head -n 20 | sed -e 's/%/%25/g' | sed -e ':a;N;$!ba;s/\n/%0A/g' | sed 's/^/::error title=Detalhes::/'
+            exit 1
+          fi
           mkdir -p ../out
           cp $(ls app/build/outputs/apk/release/*.apk app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1) ../out/bispo-campo.apk
       - uses: actions/upload-artifact@v4
