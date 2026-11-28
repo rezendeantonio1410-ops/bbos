@@ -14,6 +14,7 @@ const protectedPrefixes = [
   "/financeiro",
   "/custos",
   "/pedidos",
+  "/quilometragem",
   "/vendas",
   "/commerce",
   "/bi",

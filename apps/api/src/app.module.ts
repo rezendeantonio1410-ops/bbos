@@ -27,6 +27,7 @@ import { AuthService } from "./auth.service";
 import { AuthGuard } from "./auth.guard";
 import { AdminCoffeeReferenceController } from "./admin-coffee-reference.controller";
 import { APP_GUARD } from "@nestjs/core";
+import { MileageController } from "./mileage.controller";
 import { UnconfiguredTaxRegistryProvider } from "./tax-registry.provider";
 import { UnconfiguredStateRegistrationProvider } from "./state-registration.provider";
 import { BrokersController } from "./brokers.controller";
@@ -38,6 +39,7 @@ import { CuppingPublicController } from "./cupping-public.controller";
 @Module({
   controllers: [
     HealthController,
+    MileageController,
     DashboardController,
     BlendsController,
     ReceiptsController,
