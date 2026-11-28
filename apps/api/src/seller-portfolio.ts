@@ -260,8 +260,8 @@ export function pathToGoal(portfolio: PortfolioView, month: MonthView) {
   for (const item of ranked) {
     if (picked.length >= 5) break;
     if (gap !== null && gap > 0 && sum >= gap * 1.2 && item.kind !== "CONFIRMAR") break;
-    const { rank: _rank, ...rest } = item;
-    picked.push(rest);
+    const { customerId, name, phone, kind, value, reason } = item;
+    picked.push({ customerId, name, phone, kind, value, reason });
     sum += item.value;
   }
   return {
