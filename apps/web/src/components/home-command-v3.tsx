@@ -302,6 +302,7 @@ const BI_ACTION: Record<string, { label: string; area: Area }> = {
   REACTIVATE: { label: "Ver cliente", area: "Vendas" },
   PRICE: { label: "Ver margem", area: "Gestão" },
   LOSS: { label: "Ver torra", area: "Operação" },
+  LOSS_CHECK: { label: "Ver torras", area: "Operação" },
   SECOND: { label: "Quem chamar", area: "Vendas" },
   PUSH: { label: "Ver margem", area: "Vendas" },
   CONCENTRATION: { label: "Prospecção", area: "Vendas" },

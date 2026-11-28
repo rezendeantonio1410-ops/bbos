@@ -52,11 +52,11 @@ export function companyAverage(roasts: CoffeeRoastRow[]) {
   return roasted > 0 ? round2(green / roasted) : null;
 }
 
-/** Perda média de torra (%) nas torras registradas; 14% se ainda não houver. */
+/** Perda média de torra (%) nas torras registradas; 16% (dentro da faixa normal 15–18%) se ainda não houver. */
 export function averageRoastLoss(roasts: CoffeeRoastRow[]) {
   const green = roasts.reduce((s, r) => s + r.greenKg, 0);
   const roasted = roasts.reduce((s, r) => s + r.roastedKg, 0);
-  return green > 0 && roasted > 0 && roasted < green ? Math.round((1 - roasted / green) * 1000) / 10 : 14;
+  return green > 0 && roasted > 0 && roasted < green ? Math.round((1 - roasted / green) * 1000) / 10 : 16;
 }
 
 /** Custo por kg torrado de cada linha, pelos lotes marcados para ela. */
@@ -210,7 +210,7 @@ export function parseCoffeeCostSetting(body: unknown) {
   if (!coffeeId) throw new Error("Escolha o café.");
   if (value.greenCostPerKg === null || value.greenCostPerKg === "") return { coffeeId, greenCostPerKg: null, roastLossPercent: null };
   const greenCostPerKg = typeof value.greenCostPerKg === "number" ? value.greenCostPerKg : num(value.greenCostPerKg);
-  const roastLossPercent = typeof value.roastLossPercent === "number" ? value.roastLossPercent : num(value.roastLossPercent ?? 14);
+  const roastLossPercent = typeof value.roastLossPercent === "number" ? value.roastLossPercent : num(value.roastLossPercent ?? 16);
   if (!Number.isFinite(greenCostPerKg) || greenCostPerKg <= 0 || greenCostPerKg > 1000) throw new Error("Informe o custo do café verde por kg (R$).");
   if (!Number.isFinite(roastLossPercent) || roastLossPercent < 0 || roastLossPercent > 40) throw new Error("A perda de torra deve ficar entre 0% e 40%.");
   return { coffeeId, greenCostPerKg: round2(greenCostPerKg), roastLossPercent: Math.round(roastLossPercent * 10) / 10 };
