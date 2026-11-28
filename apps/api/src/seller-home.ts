@@ -29,6 +29,16 @@ function localDay(date: Date) {
   const local = new Date(date.getTime() - TZ_OFFSET);
   return Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
 }
+/**
+ * Datas "só dia" (vencimento, entrega prevista) chegam do banco à meia-noite UTC.
+ * Nesses casos o dia é o próprio dia UTC; aplicar o fuso empurraria para o dia anterior.
+ */
+export function calendarDay(date: Date) {
+  if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0 && date.getUTCSeconds() === 0) {
+    return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  }
+  return localDay(date);
+}
 function weekStart(date: Date) {
   const day = localDay(date);
   const dow = new Date(day).getUTCDay(); // 0 = domingo
@@ -133,25 +143,25 @@ export function buildSellerHome(input: HomeInput) {
   }> = [];
   for (const o of orders) {
     if (!["CONFIRMED", "RESERVED", "PICKING", "IN_PRODUCTION", "READY_TO_SHIP", "INVOICED"].includes(o.status) || !o.expectedDeliveryDate) continue;
-    const diff = Math.round((localDay(o.expectedDeliveryDate) - today) / DAY);
+    const diff = Math.round((calendarDay(o.expectedDeliveryDate) - today) / DAY);
     if (diff > 2) continue;
     needs.push({
       kind: diff < 0 ? "DELIVERY_LATE" : "DELIVERY_SOON",
       customerId: o.customerId, customerName: o.customerName, phone: phones.get(o.customerId) ?? "",
-      orderNumber: o.number, amount: Math.round(o.total), date: new Date(localDay(o.expectedDeliveryDate)).toISOString().slice(0, 10), daysLate: Math.max(0, -diff),
+      orderNumber: o.number, amount: Math.round(o.total), date: new Date(calendarDay(o.expectedDeliveryDate)).toISOString().slice(0, 10), daysLate: Math.max(0, -diff),
     });
   }
   const numberByOrder = new Map(input.orders.map((o) => [o.id, o]));
   for (const r of input.receivables) {
     if (r.status !== "OPEN" && r.status !== "OVERDUE" && r.status !== "PARTIALLY_PAID") continue;
-    const diff = Math.round((localDay(r.dueDate) - today) / DAY);
+    const diff = Math.round((calendarDay(r.dueDate) - today) / DAY);
     if (diff > 3) continue;
     const order = r.orderId ? numberByOrder.get(r.orderId) : undefined;
     needs.push({
       kind: diff < 0 ? "DUE_OVERDUE" : "DUE_SOON",
       customerId: r.customerId, customerName: order?.customerName ?? input.customers.find((c) => c.id === r.customerId)?.name ?? "Cliente",
       phone: phones.get(r.customerId) ?? "", orderNumber: order?.number ?? null, amount: Math.round(r.amount),
-      date: new Date(localDay(r.dueDate)).toISOString().slice(0, 10), daysLate: Math.max(0, -diff),
+      date: new Date(calendarDay(r.dueDate)).toISOString().slice(0, 10), daysLate: Math.max(0, -diff),
     });
   }
   const urgency = { DELIVERY_LATE: 0, DUE_OVERDUE: 1, DUE_SOON: 2, DELIVERY_SOON: 3 } as const;
@@ -161,8 +171,8 @@ export function buildSellerHome(input: HomeInput) {
   const open = input.receivables.filter((r) => r.status === "OPEN" || r.status === "OVERDUE" || r.status === "PARTIALLY_PAID");
   const receivable = {
     open: Math.round(open.reduce((t, r) => t + r.amount, 0)),
-    overdue: Math.round(open.filter((r) => localDay(r.dueDate) < today).reduce((t, r) => t + r.amount, 0)),
-    next7: Math.round(open.filter((r) => { const d = localDay(r.dueDate); return d >= today && d <= today + 7 * DAY; }).reduce((t, r) => t + r.amount, 0)),
+    overdue: Math.round(open.filter((r) => calendarDay(r.dueDate) < today).reduce((t, r) => t + r.amount, 0)),
+    next7: Math.round(open.filter((r) => { const d = calendarDay(r.dueDate); return d >= today && d <= today + 7 * DAY; }).reduce((t, r) => t + r.amount, 0)),
   };
 
   // Leituras (só quando há dado que as sustente).
