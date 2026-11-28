@@ -1,6 +1,6 @@
 "use client";
 
-import { normalizeTaxId } from "@bbos/shared";
+import { CUSTOMER_SEGMENTS, normalizeTaxId } from "@bbos/shared";
 
 import Link from "next/link";
 import {
@@ -136,17 +136,7 @@ type CustomerSale = {
   }>;
 };
 
-const segments = [
-  "Distribuidor",
-  "Cafeteria",
-  "Escritório",
-  "Varejo",
-  "Restaurante / Hotel",
-  "White Label",
-  "Exportação",
-  "Consumidor final",
-  "Outro",
-];
+const segments: string[] = [...CUSTOMER_SEGMENTS];
 const states = [
   "AC",
   "AL",
