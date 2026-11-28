@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { marketplaceOrderList, monthMargin, salesOfTheDay, payerDelays, repurchaseHealth, snoozeUntil, validateGoal, validateTaskKey } from "./command-center-insights";
+import { itemLabel, marketplaceOrderList, marketplaceShipState, monthMargin, orderShipState, salesOfTheDay, payerDelays, repurchaseHealth, snoozeUntil, validateGoal, validateTaskKey } from "./command-center-insights";
 
 const now = new Date("2026-11-27T12:00:00Z");
 const d = (iso: string) => new Date(`${iso}T12:00:00Z`);
@@ -85,4 +85,17 @@ test("lista do marketplace: itens, situação e totais sem cancelados", () => {
   assert.equal(list.orders[0]!.destination, "Cidade Exemplo/SP");
   assert.equal(list.orders[2]!.destination, null);
   assert.deepEqual(list.totals, { orders: 2, cancelled: 1, gross: 161, fees: 20, net: 141, averageTicket: 80.5, units: 2 });
+});
+
+test("vendas de hoje: produto resumido e situação do envio", () => {
+  assert.equal(itemLabel([{ name: "Café Em Grãos Especial Bispo Caramelo Chocolate 500g", quantity: 2 }]), "2× Caramelo Chocolate");
+  assert.equal(itemLabel([{ name: "Café Moído Especial Bispo Singular Frutado 500g", quantity: 1 }, { name: "Outro", quantity: 1 }]), "1× Singular Frutado e mais 1");
+  assert.equal(itemLabel([{ name: "Espresso Clássico 1 kg", quantity: 3 }]), "3× Espresso Clássico");
+  assert.equal(itemLabel([]), null);
+  assert.equal(orderShipState("READY_TO_SHIP"), "TO_SHIP");
+  assert.equal(orderShipState("SHIPPED"), "SHIPPED");
+  assert.equal(orderShipState("DELIVERED"), "DELIVERED");
+  assert.equal(marketplaceShipState(["paid", "not_delivered"]), "TO_SHIP");
+  assert.equal(marketplaceShipState(["paid", "delivered"]), "DELIVERED");
+  assert.equal(marketplaceShipState(null), "TO_SHIP");
 });

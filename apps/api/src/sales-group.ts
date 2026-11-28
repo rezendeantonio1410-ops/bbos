@@ -31,3 +31,15 @@ export function groupSales(rows: Array<{ partnerB2B: boolean; webStore: boolean;
   }
   return [...map.values()].filter((g) => g.revenue > 0 || g.orders > 0).sort((a, b) => b.revenue - a.revenue);
 }
+
+/** Vendas por dia e grupo (para o gráfico da Central): uma linha por dia com o valor de cada grupo. */
+export function dailySalesGroups(rows: Array<{ day: string; partnerB2B: boolean; webStore: boolean; marketplace?: boolean; segment: string | null; revenue: number }>) {
+  const days = new Map<string, Partial<Record<SalesGroup, number>>>();
+  for (const r of rows) {
+    const group = salesGroup(r);
+    const entry = days.get(r.day) ?? {};
+    entry[group] = Math.round(((entry[group] ?? 0) + Number(r.revenue || 0)) * 100) / 100;
+    days.set(r.day, entry);
+  }
+  return [...days.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, groups]) => ({ day, groups }));
+}

@@ -1,10 +1,15 @@
-import { BadRequestException, Body, Controller, Delete, Get, Header, Param, Post, Put, Query, Req, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, Header, Param, Post, Put, Query, Req, UnauthorizedException } from "@nestjs/common";
 import { prisma } from "@bbos/database";
 import type { Request } from "express";
 import { AuthService } from "./auth.service";
+import { NOT_INTERNAL } from "./bi-data";
+import { SALES_GROUPS, dailySalesGroups, groupSales } from "./sales-group";
 import {
+  itemLabel,
   marketplaceOrderList,
+  marketplaceShipState,
   monthMargin,
+  orderShipState,
   salesOfTheDay,
   payerDelays,
   repurchaseHealth,
@@ -210,10 +215,12 @@ export class CommandCenterController {
     const local = new Date(now.getTime() - 3 * 3_600_000);
     const dayStart = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate(), 3, 0, 0));
     const month = saoPauloMonth(now);
-    const [orders, inbox, inboxMonth] = await Promise.all([
+    const [orders, inbox, inboxMonth, pending] = await Promise.all([
       this.database.$queryRawUnsafe<any[]>(
         `SELECT o.id,COALESCE(o."orderNumber",o.code) AS code,o."createdAt" AS at,o."totalAmount"::float AS amount,
-                c.name AS customer,COALESCE(ch.name,'Venda direta') AS channel,ch."platformCode" AS platform
+                c.name AS customer,COALESCE(ch.name,'Venda direta') AS channel,ch."platformCode" AS platform,o.status::text AS status,
+                (SELECT COALESCE(jsonb_agg(jsonb_build_object('name',i."productName",'quantity',i.quantity) ORDER BY i."totalAmount" DESC),'[]'::jsonb)
+                   FROM "SalesOrderItem" i WHERE i."salesOrderId"=o.id) AS items
            FROM "SalesOrder" o
            JOIN "Customer" c ON c.id=o."customerId"
            LEFT JOIN "SalesChannel" ch ON ch.id=o."salesChannelId"
@@ -224,7 +231,8 @@ export class CommandCenterController {
       ),
       this.database.$queryRawUnsafe<any[]>(
         `SELECT moi.id,moi."externalOrderId" AS code,COALESCE(moi."orderedAt",moi."firstSeenAt") AS at,
-                COALESCE(moi."grossAmount",0)::float AS amount,ch.name AS channel,ch."platformCode" AS platform
+                COALESCE(moi."grossAmount",0)::float AS amount,ch.name AS channel,ch."platformCode" AS platform,
+                moi.payload->'tags' AS tags,moi.payload->'order_items' AS items
            FROM "MarketplaceOrderInbox" moi
            JOIN "SalesChannel" ch ON ch.id=moi."salesChannelId"
           WHERE moi."companyId"=$1 AND moi."salesOrderId" IS NULL
@@ -243,17 +251,102 @@ export class CommandCenterController {
           GROUP BY ch.name ORDER BY 3 DESC`,
         companyId, month.start,
       ).catch(() => []),
+      // Pedidos do BBOS que ainda não saíram (e quantos já passaram da data de entrega).
+      this.database.$queryRawUnsafe<Array<{ open: number; late: number }>>(
+        `SELECT COUNT(*)::int AS open,
+                COUNT(*) FILTER (WHERE "expectedDeliveryDate" IS NOT NULL AND "expectedDeliveryDate"::date < (now() AT TIME ZONE 'America/Sao_Paulo')::date)::int AS late
+           FROM "SalesOrder" WHERE "companyId"=$1 AND "orderType"='COMMERCIAL'
+            AND status::text IN ('CONFIRMED','RESERVED','IN_PRODUCTION','PICKING','READY_TO_SHIP')`,
+        companyId,
+      ).catch(() => [{ open: 0, late: 0 }]),
     ]);
+    const sales = salesOfTheDay(
+      orders.map((o) => ({
+        id: o.id, code: o.code, at: o.at, amount: o.amount, customer: o.customer, channel: o.channel,
+        marketplace: Boolean(o.platform && o.platform !== "BISPO_STORE"),
+        item: itemLabel((Array.isArray(o.items) ? o.items : []).map((i: any) => ({ name: String(i.name ?? ""), quantity: Number(i.quantity) || 1 }))),
+        ship: orderShipState(String(o.status ?? "")),
+      })),
+      inbox.map((o) => ({
+        id: `mp-${o.id}`, code: o.code, at: o.at, amount: o.amount, customer: null, channel: o.channel, marketplace: true,
+        item: itemLabel((Array.isArray(o.items) ? o.items : []).map((i: any) => ({ name: String(i?.item?.title ?? "Item"), quantity: Number(i?.quantity) || 1 }))),
+        ship: marketplaceShipState(o.tags),
+      })),
+    );
+    const bbosOpen = pending[0] ?? { open: 0, late: 0 };
     return {
       generatedAt: now.toISOString(),
-      ...salesOfTheDay(
-        orders.map((o) => ({ id: o.id, code: o.code, at: o.at, amount: o.amount, customer: o.customer, channel: o.channel, marketplace: Boolean(o.platform && o.platform !== "BISPO_STORE") })),
-        inbox.map((o) => ({ id: `mp-${o.id}`, code: o.code, at: o.at, amount: o.amount, customer: null, channel: o.channel, marketplace: true })),
-      ),
+      ...sales,
+      // Expedição: pedidos do BBOS em aberto + os de marketplace de hoje ainda não entregues.
+      shipping: {
+        toShip: Number(bbosOpen.open) + inbox.filter((o) => marketplaceShipState(o.tags) === "TO_SHIP").length,
+        late: Number(bbosOpen.late),
+      },
       marketplaceMonth: {
         amount: inboxMonth.reduce((sum, row) => sum + Number(row.amount), 0),
         orders: inboxMonth.reduce((sum, row) => sum + Number(row.orders), 0),
         byChannel: inboxMonth.map((row) => ({ channel: row.channel, amount: Number(row.amount), orders: Number(row.orders) })),
+      },
+    };
+  }
+
+  /**
+   * Vendas por grupo (Signa, Distribuidores, White Label, Pontos de consumo,
+   * Mercado Livre, Loja online) dia a dia nas últimas 8 semanas, para o gráfico
+   * da Central. Só a liderança vê.
+   */
+  @Get("sales-groups")
+  @Header("Cache-Control", "private, no-store")
+  async salesGroups(@Req() req: Request) {
+    const actor = await this.actor(req);
+    if (!["ADMIN", "EXECUTIVE"].includes(String(actor.role))) throw new ForbiddenException("Só a liderança vê as vendas por grupo.");
+    const now = new Date();
+    const local = new Date(now.getTime() - 3 * 3_600_000);
+    // Segunda-feira de 7 semanas atrás (8 semanas contando a atual), meia-noite em São Paulo.
+    const dow = (local.getUTCDay() + 6) % 7;
+    const since = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate() - dow - 49, 3, 0, 0));
+    // Também o mês passado inteiro, para comparar no mesmo período (1 até o dia de hoje).
+    const previousStart = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth() - 1, 1, 3, 0, 0));
+    const queryFrom = previousStart < since ? previousStart : since;
+    const day = (column: string) => `to_char((${column} AT TIME ZONE 'UTC') AT TIME ZONE 'America/Sao_Paulo','YYYY-MM-DD')`;
+    const rows = await this.database.$queryRawUnsafe<Array<{ day: string; segment: string | null; partnerB2B: boolean; webStore: boolean; marketplace: boolean; revenue: number; orders: number }>>(
+      `SELECT ${day('o."orderedAt"')} AS day,c.segment,
+              (EXISTS (SELECT 1 FROM "StorefrontPartnerCustomer" l JOIN "User" pu ON pu."storefrontPartnerId"=l."partnerId"
+                        WHERE l."customerId"=o."customerId" AND pu.role::text='PARTNER')
+               OR EXISTS (SELECT 1 FROM "User" pu WHERE pu."storefrontPartnerId"=o."createdByStorefrontPartnerId" AND pu.role::text='PARTNER')) AS "partnerB2B",
+              (COALESCE(o."orderNumber",'') LIKE 'WEB-%') AS "webStore", false AS marketplace,
+              SUM(o."totalAmount")::float AS revenue,COUNT(*)::int AS orders
+         FROM "SalesOrder" o JOIN "Customer" c ON c.id=o."customerId"
+        WHERE o."companyId"=$1 AND o."orderType"='COMMERCIAL' AND o.status::text<>'CANCELLED' AND o."orderedAt">=$2 AND ${NOT_INTERNAL}
+        GROUP BY 1,2,3,4
+       UNION ALL
+       SELECT ${day('COALESCE(moi."orderedAt",moi."firstSeenAt")')},NULL,false,false,true,SUM(COALESCE(moi."grossAmount",0))::float,COUNT(*)::int
+         FROM "MarketplaceOrderInbox" moi
+        WHERE moi."companyId"=$1 AND moi."salesOrderId" IS NULL
+          AND LOWER(COALESCE(moi."externalStatus",'')) NOT IN ('cancelled','canceled','cancelado')
+          AND COALESCE(moi."orderedAt",moi."firstSeenAt")>=$2
+        GROUP BY 1`,
+      actor.companyId, queryFrom,
+    );
+    const month = saoPauloMonth(now).key;
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    const todayIso = iso(local);
+    const prevKey = iso(previousStart).slice(0, 7);
+    const prevDays = new Date(Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), 0)).getUTCDate();
+    const prevUntil = `${prevKey}-${String(Math.min(local.getUTCDate(), prevDays)).padStart(2, "0")}`;
+    const monthRows = rows.filter((r) => r.day.startsWith(month) && r.day <= todayIso);
+    const monthGroups = groupSales(monthRows);
+    return {
+      generatedAt: now.toISOString(),
+      since: iso(since).slice(0, 10),
+      groups: SALES_GROUPS,
+      days: dailySalesGroups(rows.filter((r) => r.day >= iso(since).slice(0, 10))),
+      month: {
+        key: month,
+        total: Math.round(monthGroups.reduce((sum, g) => sum + g.revenue, 0) * 100) / 100,
+        orders: monthGroups.reduce((sum, g) => sum + g.orders, 0),
+        previousTotal: Math.round(rows.filter((r) => r.day.startsWith(prevKey) && r.day <= prevUntil).reduce((sum, r) => sum + Number(r.revenue || 0), 0) * 100) / 100,
+        groups: monthGroups.map((g) => ({ name: g.name, revenue: Math.round(g.revenue * 100) / 100, orders: g.orders })),
       },
     };
   }
