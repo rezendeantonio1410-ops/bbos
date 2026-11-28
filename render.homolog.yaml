@@ -2,6 +2,9 @@
 # Own PostgreSQL (no external access), fictitious seed data, no scheduled
 # jobs/workers and NO payment, Bling, NF-e, e-mail, push, Melhor Envio or
 # Mercado Livre credentials. Never point DATABASE_URL at bbos-postgres-staging.
+# RC3: manual deploy only after confirming the workspace, database identity,
+# disabled integrations and exact CI-approved commit for BOTH services.
+# This file is a proposal, not authorization to sync a Render Blueprint.
 databases:
   - name: bbos-postgres-homolog
     plan: free
@@ -17,8 +20,8 @@ services:
     runtime: node
     plan: free
     region: virginia
-    branch: feature/signa-private-customers-analytics
-    autoDeployTrigger: commit
+    branch: test/signa-release-role-regression-20261127-2000
+    autoDeployTrigger: "off"
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @bbos/database build && pnpm --filter @bbos/shared build && pnpm --filter @bbos/api build
     # Empty database: bootstrap reproducing production history, then the
     # fictitious seed. Both refuse to run against a database with real data.
@@ -55,8 +58,8 @@ services:
     runtime: node
     plan: free
     region: virginia
-    branch: feature/signa-private-customers-analytics
-    autoDeployTrigger: commit
+    branch: test/signa-release-role-regression-20261127-2000
+    autoDeployTrigger: "off"
     buildCommand: pnpm install --frozen-lockfile && pnpm --filter @bbos/shared build && pnpm --filter @bbos/ui build && pnpm --filter @bbos/web build
     startCommand: pnpm --filter @bbos/web start
     envVars:
