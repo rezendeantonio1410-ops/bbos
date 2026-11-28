@@ -366,11 +366,42 @@ export class DashboardService implements OnModuleDestroy {
                 AND so.status::text IN ('INVOICED','READY_TO_SHIP')
                 AND so."updatedAt" < NOW() - INTERVAL '3 days'
                 AND NOT EXISTS (SELECT 1 FROM "Shipment" sh WHERE sh."salesOrderId"=so.id AND sh."labelUrl" IS NOT NULL)
+                AND NOT EXISTS (SELECT 1 FROM "User" iu WHERE lower(iu.email)=lower(c.email) AND iu."companyId"=c."companyId"
+                                 AND c.email IS NOT NULL AND c.email<>'' AND iu.role::text<>'PARTNER')
               ORDER BY so."updatedAt" ASC LIMIT 1`,
             companyId,
           )
           .catch(() => []);
+    // Pedido parado há mais de 1 dia esperando torra ou embalagem: o pedido
+    // mostra o que falta (Pedir torra / Confirmar café embalado).
+    const waitingPacking = excludePlatformOrders
+      ? []
+      : await this.db
+          .$queryRawUnsafe<Array<{ id: string; orderNumber: string | null; customerName: string | null; total: number }>>(
+            `SELECT so.id,COALESCE(so."orderNumber",so.code) AS "orderNumber",c.name AS "customerName",
+                    count(*) OVER ()::int AS total
+               FROM "SalesOrder" so
+               JOIN "Customer" c ON c.id=so."customerId"
+              WHERE so."companyId"=$1 AND so.status::text='IN_PRODUCTION' AND so."orderType"='COMMERCIAL'
+                AND so."updatedAt" < NOW() - INTERVAL '1 day'
+                AND NOT EXISTS (SELECT 1 FROM "User" iu WHERE lower(iu.email)=lower(c.email) AND iu."companyId"=c."companyId"
+                                 AND c.email IS NOT NULL AND c.email<>'' AND iu.role::text<>'PARTNER')
+              ORDER BY COALESCE(so."expectedDeliveryDate",so."orderedAt") ASC LIMIT 1`,
+            companyId,
+          )
+          .catch(() => []);
     const alerts = [
+      ...(waitingPacking[0]
+        ? [
+            {
+              tone: "ATENÇÃO",
+              title: `${waitingPacking[0].total} pedido(s) esperando torra ou embalagem`,
+              impact: `${waitingPacking[0].orderNumber ?? "Pedido"}${waitingPacking[0].customerName ? ` · ${waitingPacking[0].customerName}` : ""}: o pedido mostra o que falta para seguir.`,
+              href: waitingPacking[0].total === 1 ? `/pedidos?pedido=${waitingPacking[0].id}` : "/pedidos",
+              action: waitingPacking[0].total === 1 ? "Abrir pedido" : "Ver pedidos",
+            },
+          ]
+        : []),
       ...(withoutLabel[0]
         ? [
             {

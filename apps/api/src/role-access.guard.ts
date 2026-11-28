@@ -90,6 +90,8 @@ export const CONTROLLER_ROLE_POLICY: Readonly<
   DirectShipmentController: CORE,
   // Central de comando v6: leitura para a equipe; meta do mês só liderança.
   CommandCenterController: CORE,
+  BusinessIntelligenceController: LEADERSHIP,
+  BiReadingController: LEADERSHIP,
   // Carteira do vendedor: o próprio vendedor e a liderança.
   SellerPortfolioController: ["ADMIN", "EXECUTIVE", "SALES"],
   SalesOrderApprovalsController: CORE,

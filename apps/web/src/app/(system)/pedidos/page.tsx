@@ -27,6 +27,7 @@ import { Badge, Card } from "@bbos/ui";
 import { calculateSalesLineDiscount } from "@bbos/shared";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { OrderBillingPdfButton } from "@/components/order-billing-pdf-button";
+import { OrderDueDateChange } from "@/components/order-due-date-change";
 import { OrderPdfLink } from "@/components/order-pdf-link";
 import {
   buildCustomerOrderInsights,
@@ -47,6 +48,7 @@ import {
 import { orderPaymentDue } from "@/lib/order-payment-due";
 import { deliveryDaysLate, formatDeliveryDate } from "@/lib/delivery-date";
 import { DirectShipmentCard } from "@/components/direct-shipment-card";
+import { OrderPackagingStep } from "@/components/order-packaging-step";
 import { directShipmentStatus, type DirectShipmentSummary } from "@/lib/direct-shipment";
 
 const salesOrdersApi = () => `${getApiBaseUrl()}/sales-orders`;
@@ -648,6 +650,7 @@ export default function OrdersPage() {
   const [canCompleteDelivery, setCanCompleteDelivery] = useState(false);
   const [canPrepareReexpedition, setCanPrepareReexpedition] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
+  const openOrderId = useRef<string | null>(null);
   const [stage, setStage] = useState("ALL");
   const [onlyExceptions, setOnlyExceptions] = useState(false);
   const [onlySamples, setOnlySamples] = useState(false);
@@ -749,6 +752,8 @@ export default function OrdersPage() {
       setOnlyReadyToInvoice(true);
       openReadyToInvoice.current = true;
     }
+    // Vindo da Central: /pedidos?pedido=<id> abre o pedido direto.
+    openOrderId.current = searchParams.get("pedido");
     void fetch(`${getApiBaseUrl()}/auth/me`, {
       credentials: "include",
       cache: "no-store",
@@ -825,6 +830,13 @@ export default function OrdersPage() {
       return sort.dir === "asc" ? result : -result;
     });
   }, [orders, stage, onlyExceptions, onlyReadyToInvoice, onlySamples, search, sort]);
+
+  useEffect(() => {
+    if (!openOrderId.current || !orders.length) return;
+    const found = orders.find((item) => item.id === openOrderId.current);
+    openOrderId.current = null;
+    if (found) setSelected(found);
+  }, [orders]);
 
   useEffect(() => {
     if (!openReadyToInvoice.current || !orders.length) return;
@@ -5191,6 +5203,16 @@ function OrderDrawer({
                   <div className="mt-3">
                     <OrderBillingPdfButton orderId={order.id} orderNumber={order.orderNumber ?? order.code} />
                   </div>
+                  {canOperate && (
+                    <OrderDueDateChange
+                      orderId={order.id}
+                      currentDueDate={billingSummary.dueDate ?? null}
+                      onDone={async () => {
+                        await loadBillingSummary();
+                        await onChanged();
+                      }}
+                    />
+                  )}
                 </section>
               )}
             <div className="mt-5 space-y-2 sm:mt-6">
@@ -5259,7 +5281,7 @@ function OrderDrawer({
                                 : order.status === "RESERVED"
                                   ? "O estoque está reservado. Inicie a separação física do pedido."
                                   : order.status === "IN_PRODUCTION"
-                                    ? "O café torrado a granel está reservado por linha e perfil. O pedido aguarda a embalagem definida na venda."
+                                    ? "Aguardando embalagem. Veja abaixo o que falta para cada café."
                                     : order.status === "PICKING"
                                       ? "Confirme que a quantidade separada corresponde à quantidade reservada."
                                       : order.status === "READY_TO_SHIP" &&
@@ -5384,6 +5406,13 @@ function OrderDrawer({
                     </button>
                   )}
                 </div>
+                {order.status === "IN_PRODUCTION" && (
+                  <OrderPackagingStep
+                    orderId={order.id}
+                    canOperate={canOperate}
+                    onDone={onChanged}
+                  />
+                )}
                 {canFinalizeDelivery && (
                   <p className="mt-3 text-[10px] text-stone-500">
                     A confirmação de retirada ou entrega grava data e usuário

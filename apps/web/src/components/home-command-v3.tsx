@@ -16,7 +16,7 @@ import {
 import { getApiBaseUrl } from "@/lib/api-url";
 import { roastPace } from "@/lib/roast-pace";
 import { buildCashFlowLines, type CashFlowLine } from "@/lib/finance-cashflow";
-import { buildBrief, greenCoverageDays, greenStock, payableSnapshot, salesPace, type SalesGeo } from "@/lib/command-center";
+import { buildBrief, greenCoverageDays, greenStock, payableSnapshot, receivableSnapshot, salesPace, type SalesGeo } from "@/lib/command-center";
 import { buildForecast, cashBufferDays, paidLast30Days, plannedLabel, type RecurringExpense } from "@/lib/cash-forecast";
 import type { CashView, CenterTask, TimelineItem } from "./command-center-v4";
 import {
@@ -32,7 +32,7 @@ import {
   type SnoozeAction,
   type TodaySales,
 } from "@/lib/command-center-v6";
-import { CommandCenterV4 } from "./command-center-v4";
+import { CommandCenterToday, type Area, type TodayTask, type Vital } from "./command-center-today";
 import { SellerHome } from "./seller-portfolio";
 
 const kg = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
@@ -124,6 +124,14 @@ export function HomeCommandV3() {
   React.useEffect(() => { void loadInsights(); }, [loadInsights]);
 
   // Vendas de hoje (BBOS + marketplaces), atualizadas a cada minuto com a aba visível.
+  const [reading, setReading] = React.useState<BiReadingLite | null>(null);
+  React.useEffect(() => {
+    if (!identity || !["ADMIN", "EXECUTIVE"].includes(identity.role ?? "")) return;
+    void fetch(`${getApiBaseUrl()}/bi/reading`, { credentials: "include", cache: "no-store" })
+      .then(async (r) => (r.ok ? ((await r.json()) as BiReadingLite) : null))
+      .then(setReading)
+      .catch(() => setReading(null));
+  }, [identity]);
   const [today, setToday] = React.useState<TodaySales | null>(null);
   const [freshIds, setFreshIds] = React.useState<Set<string>>(new Set());
   React.useEffect(() => {
@@ -277,8 +285,60 @@ export function HomeCommandV3() {
       reloadInsights={loadInsights}
       today={today}
       freshIds={freshIds}
+      reading={reading}
+      canSeeBi={["ADMIN", "EXECUTIVE"].includes(identity?.role ?? "")}
     />
   );
+}
+
+/** O que a Central usa da Leitura (BI): plano de ação e café verde. */
+type BiReadingLite = {
+  actions: Array<{ key: string; title: string; why: string; who: string; when: string; impact: number | null; link: string; status: string }>;
+  ahead: { green: { days: number | null; buyBy: string | null; runOutAt: string | null } };
+};
+
+const BI_ACTION: Record<string, { label: string; area: Area }> = {
+  GREEN: { label: "Compras", area: "Compras" },
+  REACTIVATE: { label: "Ver cliente", area: "Vendas" },
+  PRICE: { label: "Ver margem", area: "Gestão" },
+  LOSS: { label: "Ver torra", area: "Operação" },
+  SECOND: { label: "Quem chamar", area: "Vendas" },
+  PUSH: { label: "Ver margem", area: "Vendas" },
+  CONCENTRATION: { label: "Prospecção", area: "Vendas" },
+  LATE: { label: "Financeiro", area: "Financeiro" },
+  DELIVERY_DATA: { label: "Ver pedidos", area: "Operação" },
+};
+
+/** Ações do plano 5W2H ainda abertas viram tarefas da Central. */
+export function biTasks(reading: BiReadingLite | null): TodayTask[] {
+  if (!reading) return [];
+  return reading.actions
+    .filter((a) => a.status === "TODO" || a.status === "DOING")
+    .map((a) => {
+      const kind = a.key.split(":")[0]!;
+      const meta = BI_ACTION[kind] ?? { label: "Abrir", area: "Gestão" as Area };
+      const urgentGreen = kind === "GREEN" && (reading.ahead.green.days ?? 99) < 20;
+      return {
+        key: `bi:${a.key}`,
+        tone: urgentGreen ? ("critical" as const) : ["GREEN", "REACTIVATE", "PRICE", "LOSS"].includes(kind) ? ("attention" as const) : ("ok" as const),
+        title: a.title,
+        detail: a.why,
+        why: `${a.who}${a.status === "DOING" ? " · em andamento" : ""}`,
+        href: a.link,
+        action: meta.label,
+        area: meta.area,
+        due: a.when,
+        dueTone: urgentGreen ? ("red" as const) : kind === "GREEN" ? ("amber" as const) : ("gray" as const),
+      };
+    });
+}
+
+/** Área de quem resolve, pelo destino da tarefa. */
+export function areaOf(task: CenterTask): Area {
+  if (task.key === "overdue" || task.key === "statement" || task.key.startsWith("pay") || task.href.startsWith("/financeiro")) return "Financeiro";
+  if (task.key === "lapsed" || task.href.startsWith("/clientes") || task.href.startsWith("/prospeccao")) return "Vendas";
+  if (task.href.startsWith("/compras")) return "Compras";
+  return "Operação";
 }
 
 type ExportSample = { id: string; buyerCountry?: string | null; buyerName?: string | null; carrier?: string | null; status: string; trackingProblem?: string | null; lastEventAt?: string | null };
@@ -323,7 +383,7 @@ const brlTask = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "B
  */
 function CommandCenter({
   home, greeting, firstName, decisions, state,
-  green, finance, geo, samples, insights, reloadInsights, today, freshIds,
+  green, finance, geo, samples, insights, reloadInsights, today, freshIds, reading, canSeeBi,
 }: {
   home: HomeData; greeting: string; firstName: string;
   decisions: HomeData["alerts"]; state: EvidenceState;
@@ -331,6 +391,7 @@ function CommandCenter({
   finance: FinanceSnapshot; geo: SalesGeo | null; samples: ExportSample[];
   insights: CommandInsights | null; reloadInsights: () => Promise<void>;
   today: TodaySales | null; freshIds: Set<string>;
+  reading: BiReadingLite | null; canSeeBi: boolean;
 }) {
   // Tarefas adiadas (Feito / Amanhã / 7 dias): vêm do servidor e somem na hora ao clicar.
   const [snoozed, setSnoozed] = React.useState<Set<string>>(new Set());
@@ -492,7 +553,7 @@ function CommandCenter({
       : []),
   ];
   const withAge = tasks.map((task) => ({ ...task, repeatedDays: repeatedDays(firstSeen[taskSnoozeKey(task)]) }));
-  const visibleTasks = orderTasks(withoutSnoozed(withAge, snoozed)).slice(0, 5);
+  const visibleTasks = orderTasks(withoutSnoozed(withAge, snoozed));
   const seenSignature = tasks.map(taskSnoozeKey).join("\n");
   React.useEffect(() => {
     const keys = seenSignature ? seenSignature.split("\n") : [];
@@ -541,30 +602,69 @@ function CommandCenter({
         : visibleTasks.length
           ? `${visibleTasks.length} ${visibleTasks.length === 1 ? "coisa pede" : "coisas pedem"} você`
           : "Nada pede decisão agora";
+  // Tarefas: as da operação ganham área e prazo; as do plano 5W2H vêm do BI.
+  const todayTasks: TodayTask[] = [
+    ...visibleTasks.map((task) => ({
+      ...task,
+      area: areaOf(task),
+      due: task.tone === "critical" ? "urgente" : task.repeatedDays && task.repeatedDays > 1 ? `na lista há ${task.repeatedDays} dias` : undefined,
+      dueTone: task.tone === "critical" ? ("red" as const) : ("gray" as const),
+    })),
+    ...orderTasks(withoutSnoozed(biTasks(reading), snoozed)),
+  ];
+  // Sinais vitais: pequenos; cor só fora do normal (gestão por exceção).
+  const receivable = receivableSnapshot(finance?.lines ?? []);
+  const localNow = new Date(Date.now() - 3 * 3_600_000);
+  const dayOfMonth = localNow.getUTCDate();
+  const daysInMonth = new Date(Date.UTC(localNow.getUTCFullYear(), localNow.getUTCMonth() + 1, 0)).getUTCDate();
+  const salesToday = today?.total ?? home.salesToday;
+  const dailyAverage = dayOfMonth > 1 ? (salesMonthAll - salesToday) / (dayOfMonth - 1) : 0;
+  const greenDays = reading?.ahead.green.days ?? greenCoverageDays(green.free, home.productionPlannedKg);
+  const buyBy = reading?.ahead.green.buyBy ?? null;
+  const greenTone = greenDays !== null && greenDays !== undefined ? (greenDays < 15 ? "bad" : greenDays < 45 ? "warn" : undefined) : undefined;
+  const vitals: Vital[] = [
+    {
+      key: "today", label: "Vendas hoje", value: brlTask.format(salesToday), href: "/pedidos",
+      note: [today ? `${today.orders} ${today.orders === 1 ? "pedido" : "pedidos"}` : null, dailyAverage > 0 ? `média do mês ${brlTask.format(dailyAverage)}/dia` : null].filter(Boolean).join(" · ") || undefined,
+      badge: dailyAverage > 0 && salesToday > 0 ? (salesToday >= dailyAverage ? "▲ acima da média" : "abaixo da média") : undefined,
+      badgeTone: salesToday >= dailyAverage ? "up" : "warn",
+    },
+    cashView?.known
+      ? { key: "cash", label: "Caixa", value: brlTask.format(cashView.balance), href: "/financeiro/fluxo-caixa", note: cashView.fixedBufferDays ? `${cashView.fixedBufferDays} dias de contas fixas` : undefined, tone: cashView.worst && cashView.worst.balance < cashView.minimum ? "bad" : undefined, badge: cashView.worst && cashView.worst.balance < cashView.minimum ? "abaixo do mínimo" : undefined, badgeTone: "down" }
+      : { key: "cash", label: "Caixa", value: "—", href: "/financeiro/conciliacao/importar", note: "importe o extrato do Itaú", tone: "warn", badge: "atenção", badgeTone: "warn" },
+    receivable.overdue > 0
+      ? { key: "overdue", label: "Vencidos", value: brlTask.format(receivable.overdue), href: "/financeiro/receber", note: `${receivable.overdueCount} título(s) · o mais antigo há ${receivable.oldestOverdueDays} dias`, tone: "bad", badge: "cobrar", badgeTone: "down" }
+      : { key: "overdue", label: "Vencidos", value: "nada", href: "/financeiro/receber", note: receivable.total > 0 ? `${brlTask.format(receivable.total)} a vencer` : undefined },
+    { key: "green", label: "Café verde", value: greenDays === null || greenDays === undefined ? "—" : `~${greenDays} dias`, href: "/estoque", note: buyBy ? `comprar até ${dayMonth(buyBy)}` : `${kg.format(green.free)} kg livres`, tone: greenTone, badge: greenTone ? "atenção" : undefined, badgeTone: "warn" },
+  ];
+  const dateLabel = new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Sao_Paulo" }).replace("-feira", "").replace(/^./, (c) => c.toUpperCase());
+  const onTask = async (task: CenterTask, action: SnoozeAction | "DISMISS") => {
+    if (task.key.startsWith("bi:")) {
+      void fetch(`${getApiBaseUrl()}/bi/actions`, {
+        method: "PUT", credentials: "include", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ actionKey: task.key.slice(3), status: action === "DISMISS" ? "DISMISSED" : action === "DONE" ? "DONE" : "DOING", title: task.title }),
+      }).catch(() => null);
+    }
+    return snooze(task, action === "DISMISS" ? "DONE" : action);
+  };
+  void undoSnooze;
+  void saveGoal;
+  void freshIds;
+  void brief;
+  void summary;
   return (
-    <CommandCenterV4
-      home={{ ...home, salesMonth: salesMonthAll, salesToday: today?.total ?? home.salesToday }}
-      today={today}
-      freshIds={freshIds}
+    <CommandCenterToday
       greeting={greeting}
       firstName={firstName}
-      summary={summary}
-      tasks={visibleTasks}
-      onSnooze={snooze}
-      onUndoSnooze={undoSnooze}
-      insights={insights}
-      onSaveGoal={saveGoal}
-      freshness={freshness}
-      greenTotal={green.total}
-      greenReserved={green.reserved}
-      greenFree={green.free}
-      cashLines={finance?.lines ?? []}
-      financeReady={Boolean(finance)}
-      brief={brief}
-      cashView={cashView}
+      dateLabel={dateLabel}
+      tasks={todayTasks}
+      vitals={vitals}
       timeline={timeline}
-      geo={geo}
+      glance={{ revenue: salesMonthAll, projection: salesPace(salesMonthAll).projection, previousRevenue: geo?.previousRevenue ?? 0, marginPercent: insights?.margin.marginPercent ?? null, goal: insights?.goal.salesTarget ?? null, daysLeft: Math.max(0, daysInMonth - dayOfMonth) }}
+      freshness={freshness}
       newMenu={<NewMenu />}
+      onSnooze={onTask}
+      canSeeBi={canSeeBi}
     />
   );
 }

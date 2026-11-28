@@ -260,8 +260,10 @@ export function pathToGoal(portfolio: PortfolioView, month: MonthView) {
   for (const item of ranked) {
     if (picked.length >= 5) break;
     if (gap !== null && gap > 0 && sum >= gap * 1.2 && item.kind !== "CONFIRMAR") break;
-    const { customerId, name, phone, kind, value, reason } = item;
-    picked.push({ customerId, name, phone, kind, value, reason });
+    const { rank, ...rest } = item;
+    // Internal ordering rank is intentionally omitted from the response.
+    void rank;
+    picked.push(rest);
     sum += item.value;
   }
   return {

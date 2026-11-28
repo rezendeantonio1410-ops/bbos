@@ -37,6 +37,7 @@ import {
   type ReceiptStatus,
 } from "@bbos/shared";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { LotLinesEditor } from "@/components/lot-lines-picker";
 
 const currency = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -157,10 +158,14 @@ function DataPoint({ label, value }: { label: string; value: string }) {
 
 function LotDrawer({
   lot,
+  lines,
+  onLinesSaved,
   movements,
   onClose,
 }: {
   lot: InventoryLot;
+  lines: string[];
+  onLinesSaved: (lines: string[]) => void;
   movements: InventoryMovement[];
   onClose: () => void;
 }) {
@@ -198,6 +203,9 @@ function LotDrawer({
           </div>
         </header>
         <div className="space-y-8 p-6">
+          <section className="rounded-2xl border border-teal-100 bg-teal-50/40 p-4">
+            <LotLinesEditor key={lot.id} lotId={lot.id} initial={lines} onSaved={onLinesSaved} />
+          </section>
           <section>
             <h3 className="text-xs font-bold uppercase tracking-[.14em] text-stone-400">
               Origem
@@ -640,6 +648,7 @@ export default function InventoryPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [locationFilter, setLocationFilter] = useState("all");
   const [selectedLot, setSelectedLot] = useState<InventoryLot | null>(null);
+  const [lotLines, setLotLines] = useState<Record<string, string[]>>({});
   const [selectedAlert, setSelectedAlert] = useState<InventoryAlert | null>(
     null,
   );
@@ -685,6 +694,14 @@ export default function InventoryPage() {
       .then(([goods, rawLots, rawMovements, stockOptions, roasted]) => {
         setFinishedGoods(goods as FinishedGoodsStock[]);
         setRoastedStock(roasted as RoastedStockLine[]);
+        setLotLines(
+          Object.fromEntries(
+            (rawLots as Array<Record<string, unknown>>).map((lot) => [
+              String(lot.id),
+              Array.isArray(lot.intendedLines) ? (lot.intendedLines as string[]) : [],
+            ]),
+          ),
+        );
         setLots(
           (rawLots as Array<Record<string, unknown>>).map((lot) => {
             const supplier = lot.supplier as { name?: string } | undefined;
@@ -1489,6 +1506,10 @@ export default function InventoryPage() {
       {selectedLot && (
         <LotDrawer
           lot={selectedLot}
+          lines={lotLines[selectedLot.id] ?? []}
+          onLinesSaved={(next) =>
+            setLotLines((current) => ({ ...current, [selectedLot.id]: next }))
+          }
           movements={movements}
           onClose={() => setSelectedLot(null)}
         />

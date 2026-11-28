@@ -795,6 +795,7 @@ model Customer {
   stateRegistration       String?
   stateRegistrationType   String                      @default("NOT_DECLARED")
   paymentTerms            String?
+  paymentWeekday          Int?                        @db.SmallInt
   active                  Boolean                     @default(true)
   creditStatus            String                      @default("NOT_ANALYZED")
   creditLimit             Decimal                     @default(0) @db.Decimal(14, 2)
@@ -919,6 +920,7 @@ model CoffeeLot {
   initialWeightKg              Decimal                       @db.Decimal(14, 3)
   currentWeightKg              Decimal                       @db.Decimal(14, 3)
   reservedWeightKg             Decimal                       @default(0) @db.Decimal(14, 3)
+  intendedLines                String[]                      @default([])
   purchaseCost                 Decimal                       @db.Decimal(14, 2)
   landedCost                   Decimal                       @db.Decimal(14, 2)
   status                       CoffeeLotStatus               @default(RECEIVED)
