@@ -11,6 +11,7 @@ import {
 import { Badge, Button, Card } from "@bbos/ui";
 import { fetchSessionIdentity, type SessionIdentity } from "@/lib/auth-session";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { LotLinesPicker } from "@/components/lot-lines-picker";
 const ROOT =
     getApiBaseUrl(),
   API = `${ROOT}/receipts`,
@@ -147,6 +148,7 @@ function Wizard({
       unit: "KG",
       bagQuantity: p.volumeQuantity,
       bagWeightKg: Number(p.nominalUnitWeightKg),
+      intendedLines: [] as string[],
     };
   };
   const [d, setD] = useState(() => base(first!)),
@@ -375,6 +377,10 @@ function Wizard({
                     />
                   }
                 />
+                <div className="sm:col-span-2">
+                  <p className="mb-1.5 text-xs font-bold text-stone-700">Linhas em que este café será usado</p>
+                  <LotLinesPicker value={d.intendedLines} onChange={(lines) => setD((x) => ({ ...x, intendedLines: lines }))} />
+                </div>
               </>
             )}
             {s === 2 && (
