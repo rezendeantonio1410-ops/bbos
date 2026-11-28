@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSellerBi, buildSellerHome, whatsappNumber, type HomeOrder } from "./seller-home";
+import { buildSellerBi, buildSellerHome, calendarDay, whatsappNumber, type HomeOrder } from "./seller-home";
 
 // Sábado, 28/11/2026, 14h em São Paulo.
 const now = new Date("2026-11-28T17:00:00Z");
@@ -89,4 +89,16 @@ test("Minha BI sem dias em campo: tempo fica vazio, sem inventar", () => {
   assert.equal(bi.time, null);
   assert.equal(bi.customers[0]?.minutes, null);
   assert.equal(bi.customers[0]?.perHour, null);
+});
+
+test("datas só-dia à meia-noite UTC não voltam um dia (entrega 30/11 continua 30/11)", () => {
+  assert.equal(new Date(calendarDay(new Date("2026-11-30T00:00:00Z"))).toISOString().slice(0, 10), "2026-11-30");
+  assert.equal(new Date(calendarDay(new Date("2026-11-30T15:00:00Z"))).toISOString().slice(0, 10), "2026-11-30");
+  const late = { ...order("9", "a", 360, "2026-11-27", "READY_TO_SHIP"), expectedDeliveryDate: new Date("2026-11-27T00:00:00Z") };
+  const soon = { ...order("10", "b", 885, "2026-11-27", "CONFIRMED"), expectedDeliveryDate: new Date("2026-11-30T00:00:00Z") };
+  const home = buildSellerHome({ orders: [late, soon], items: [], receivables: [{ orderId: "9", customerId: "a", amount: 720, dueDate: new Date("2026-11-30T00:00:00Z"), status: "OPEN" }], customers, visitsThisMonth: 0, now });
+  const byOrder = Object.fromEntries(home.needs.map((n) => [`${n.kind}:${n.orderNumber}`, n]));
+  assert.equal(byOrder["DELIVERY_LATE:B-9"]?.daysLate, 1);
+  assert.equal(byOrder["DELIVERY_SOON:B-10"]?.date, "2026-11-30");
+  assert.equal(byOrder["DUE_SOON:B-9"]?.date, "2026-11-30");
 });
