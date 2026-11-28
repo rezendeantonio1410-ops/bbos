@@ -21,12 +21,14 @@ import {
   prisma,
 } from "@bbos/database";
 import { AuthService } from "./auth.service";
+import { parseIntendedLines } from "./business-intelligence";
 import { assertCompany, requireSession } from "./auth-context";
 import { calculateWeightVariance } from "./receipts-weight";
 import { compareQuality } from "./lab-quality";
 import { isFinalLabDecision } from "./lab-analysis-decision";
 
 type ConfirmReceiptBody = {
+  intendedLines?: string[];
   companyId: string;
   supplierId: string;
   warehouseId: string;
@@ -285,6 +287,9 @@ export class ReceiptsController {
     body.responsibleUserId = actor.id;
     body.responsibleName = actor.name;
     this.validate(body);
+    let intendedLines: string[];
+    try { intendedLines = parseIntendedLines(body.intendedLines ?? []); }
+    catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "Linhas inválidas."); }
     const existing = await this.database.greenCoffeeReceipt.findUnique({
       where: { idempotencyKey: body.idempotencyKey },
       include: { coffeeLot: true },
@@ -430,6 +435,7 @@ export class ReceiptsController {
             currentWeightKg: body.netWeightKg,
             purchaseCost,
             landedCost: purchaseCost,
+            intendedLines,
             status: lotStatusFor(qualityStatus),
           },
         });

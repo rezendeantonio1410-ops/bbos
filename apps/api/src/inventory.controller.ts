@@ -5,6 +5,7 @@ import {
   Get,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Req,
   type OnModuleDestroy,
@@ -23,6 +24,7 @@ import {
 } from "@bbos/shared";
 import { AuthService } from "./auth.service";
 import { requireSession } from "./auth-context";
+import { parseIntendedLines } from "./business-intelligence";
 import {
   isGreenCoffeeProductionAvailable,
   productionAvailableWeight,
@@ -450,6 +452,21 @@ export class InventoryController implements OnModuleDestroy {
       receipt,
       traceability,
     };
+  }
+
+  /** Linhas em que o lote de café verde pode ser usado (até 3). */
+  @Patch("lots/:id/lines")
+  async setLotLines(@Param("id") id: string, @Body() body: { lines?: unknown }, @Req() req: Request) {
+    const actor = await requireSession(req, this.auth);
+    let lines: string[];
+    try { lines = parseIntendedLines(body?.lines); }
+    catch (error) { throw new BadRequestException(error instanceof Error ? error.message : "Linhas inválidas."); }
+    const updated = await this.database.coffeeLot.updateMany({
+      where: { id, companyId: actor.companyId },
+      data: { intendedLines: lines },
+    });
+    if (!updated.count) throw new NotFoundException("Lote não encontrado.");
+    return { ok: true, id, intendedLines: lines };
   }
 
   @Post("lots/:id/movements")
