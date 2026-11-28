@@ -650,6 +650,7 @@ export default function OrdersPage() {
   const [canCompleteDelivery, setCanCompleteDelivery] = useState(false);
   const [canPrepareReexpedition, setCanPrepareReexpedition] = useState(false);
   const [selected, setSelected] = useState<Order | null>(null);
+  const openOrderId = useRef<string | null>(null);
   const [stage, setStage] = useState("ALL");
   const [onlyExceptions, setOnlyExceptions] = useState(false);
   const [onlySamples, setOnlySamples] = useState(false);
@@ -751,6 +752,8 @@ export default function OrdersPage() {
       setOnlyReadyToInvoice(true);
       openReadyToInvoice.current = true;
     }
+    // Vindo da Central: /pedidos?pedido=<id> abre o pedido direto.
+    openOrderId.current = searchParams.get("pedido");
     void fetch(`${getApiBaseUrl()}/auth/me`, {
       credentials: "include",
       cache: "no-store",
@@ -827,6 +830,13 @@ export default function OrdersPage() {
       return sort.dir === "asc" ? result : -result;
     });
   }, [orders, stage, onlyExceptions, onlyReadyToInvoice, onlySamples, search, sort]);
+
+  useEffect(() => {
+    if (!openOrderId.current || !orders.length) return;
+    const found = orders.find((item) => item.id === openOrderId.current);
+    openOrderId.current = null;
+    if (found) setSelected(found);
+  }, [orders]);
 
   useEffect(() => {
     if (!openReadyToInvoice.current || !orders.length) return;
