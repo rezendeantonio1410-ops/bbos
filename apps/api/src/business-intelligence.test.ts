@@ -75,7 +75,7 @@ test("ajuste manual: aceita vírgula, limpa com vazio, recusa absurdos", () => {
 test("linha: lotes marcados dão o custo de cafés sem torra; até 3 linhas por lote", async () => {
   const { lineCosts, averageRoastLoss, parseIntendedLines } = await import("./business-intelligence");
   assert.equal(averageRoastLoss(roasts), 15.0);
-  assert.equal(averageRoastLoss([]), 14);
+  assert.equal(averageRoastLoss([]), 16);
   const byLine = lineCosts([
     { line: "EPICOS", greenCost: 3000, greenKg: 100 },
     { line: "EPICOS", greenCost: 1000, greenKg: 25 },

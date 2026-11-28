@@ -81,7 +81,7 @@ function Kpi({ label, value, note, tone }: { label: string; value: string; note?
 
 function CostEditor({ material, onSaved }: { material: Material; onSaved: () => Promise<void> }) {
   const [green, setGreen] = useState(material.manual ? String(material.manual.greenCostPerKg).replace(".", ",") : "");
-  const [loss, setLoss] = useState(material.manual ? String(material.manual.roastLossPercent).replace(".", ",") : "14");
+  const [loss, setLoss] = useState(material.manual ? String(material.manual.roastLossPercent).replace(".", ",") : "16");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const save = async (clear = false) => {

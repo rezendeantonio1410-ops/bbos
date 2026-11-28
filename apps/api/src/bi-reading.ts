@@ -22,6 +22,18 @@ export type Window = {
 };
 
 const r1 = (n: number) => Math.round(n * 10) / 10;
+
+/**
+ * Perda na torra: o café perde água e peso ao torrar. Entre 15% e 18% é o
+ * normal do processo; não é desperdício a reduzir. Fora da faixa vira aviso.
+ */
+export const ROAST_LOSS_RANGE = { min: 15, max: 18, typical: 16 } as const;
+export function roastLossStatus(lossPercent: number | null) {
+  if (lossPercent === null) return "UNKNOWN" as const;
+  if (lossPercent > ROAST_LOSS_RANGE.max) return "HIGH" as const;
+  if (lossPercent < ROAST_LOSS_RANGE.min - 2) return "LOW" as const;
+  return "NORMAL" as const;
+}
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const div = (a: number, b: number) => (b > 0 ? a / b : 0);
 const change = (cur: number, prev: number) => (prev > 0 ? r1(((cur - prev) / prev) * 100) : null);
@@ -70,7 +82,7 @@ export function resultTree(cur: Metrics, prev: Metrics) {
     kg: node(cur.kg, prev.kg),
     pricePerKg: node(cur.pricePerKg, prev.pricePerKg),
     costPerKg: node(cur.costPerKg, prev.costPerKg, false),
-    lossPercent: node(cur.lossPercent, prev.lossPercent, false),
+    lossPercent: { ...node(cur.lossPercent, prev.lossPercent, false), better: roastLossStatus(cur.lossPercent) === "HIGH" ? false : roastLossStatus(cur.lossPercent) === "LOW" ? false : null, range: ROAST_LOSS_RANGE },
     marginPercent: node(cur.marginPercent, prev.marginPercent),
   };
 }
@@ -97,7 +109,7 @@ export function threeSentences(cur: Metrics, prev: Metrics, watch: string[]) {
   if (t.ordersPerClient.better === false) downs.push(`os clientes compraram menos vezes`);
   if (t.ticket.better === false) downs.push(`o pedido médio caiu para ${brl(cur.ticket)}`);
   if (t.pricePerKg.better === false) downs.push(`o preço médio caiu de ${brl(prev.pricePerKg)} para ${brl(cur.pricePerKg)} por kg`);
-  if (t.lossPercent.better === false && cur.lossPercent !== null) downs.push(`a perda na torra subiu para ${num(cur.lossPercent)}%`);
+  if (roastLossStatus(cur.lossPercent) === "HIGH") downs.push(`a perda na torra passou de ${ROAST_LOSS_RANGE.max}% (está em ${num(cur.lossPercent!)}%)`);
   if (t.costPerKg.better === false) downs.push(`o custo por kg subiu para ${brl(cur.costPerKg)}`);
   return {
     pulled: ups.length ? cap(ups.slice(0, 2).join(" e ")) + "." : "Nenhum número cresceu contra os 30 dias anteriores.",
@@ -128,11 +140,11 @@ export function greenCoverage(availableKg: number, consumed30Kg: number, now: Da
   return { days, runOutAt: runOut.toISOString().slice(0, 10), buyBy: buyBy.toISOString().slice(0, 10), availableKg: r1(availableKg) };
 }
 
-/** Quanto a margem sobe se o preço subir R$ 5/kg e a perda cair 3 pontos. */
+/** Quanto a margem sobe se o preço subir R$ 5/kg (e a perda voltar à faixa normal, se estiver acima). */
 export function marginWhatIf(cur: Metrics, greenCostPerKg: number) {
   if (!cur.pricePerKg || !cur.costPerKg || cur.lossPercent === null || !greenCostPerKg) return null;
   const loss = cur.lossPercent / 100;
-  const target = Math.max(0, loss - 0.03);
+  const target = roastLossStatus(cur.lossPercent) === "HIGH" ? ROAST_LOSS_RANGE.typical / 100 : loss;
   const costSaving = greenCostPerKg / (1 - loss) - greenCostPerKg / (1 - target);
   const price = cur.pricePerKg + 5;
   const cost = cur.costPerKg - costSaving;
@@ -210,13 +222,15 @@ export function buildActions(input: ActionInput): Action[] {
   if (input.reactivate) {
     actions.push({ key: `REACTIVATE:${input.reactivate.id}`, title: `Reativar ${input.reactivate.name}`, why: `Pedido médio de ${brl(input.reactivate.value)} e ${input.reactivate.daysSince} dias sem comprar.`, how: "Ligação e amostra do café mais vendido para ele.", who: "Vendas", when: "esta semana", impact: input.reactivate.value, impactLabel: brl(input.reactivate.value), link: "/bi?aba=clientes" });
   }
-  if (cur.lossPercent !== null && cur.lossPercent >= 13 && input.greenCostPerKg > 0 && cur.kg > 0) {
-    const loss = cur.lossPercent / 100;
-    const target = Math.max(0.1, loss - 0.03);
+  const lossStatus = roastLossStatus(cur.lossPercent);
+  if (lossStatus === "HIGH" && input.greenCostPerKg > 0 && cur.kg > 0) {
+    const loss = cur.lossPercent! / 100;
+    const target = ROAST_LOSS_RANGE.typical / 100;
     const extraGreen = cur.kg / (1 - loss) - cur.kg / (1 - target);
     const impact = Math.round(extraGreen * input.greenCostPerKg);
-    const rose = prev.lossPercent !== null && cur.lossPercent - prev.lossPercent >= 2;
-    actions.push({ key: "LOSS", title: `Baixar a perda de torra para ${num(target * 100)}%`, why: rose ? `Subiu de ${num(prev.lossPercent!)}% para ${num(cur.lossPercent)}%.` : `Está em ${num(cur.lossPercent)}%.`, how: "Revisar curva, temperatura e ponto de descarga das últimas torras.", who: "Torra", when: "próximas 5 torras", impact, impactLabel: `+${brl(impact)}/mês`, link: "/producao" });
+    actions.push({ key: "LOSS", title: `Trazer a perda de torra de volta para ${ROAST_LOSS_RANGE.min}–${ROAST_LOSS_RANGE.max}%`, why: `Está em ${num(cur.lossPercent!)}%, acima da faixa normal do processo.`, how: "Revisar curva, temperatura e ponto de descarga das últimas torras.", who: "Torra", when: "próximas 5 torras", impact, impactLabel: `+${brl(impact)}/mês`, link: "/producao" });
+  } else if (lossStatus === "LOW") {
+    actions.push({ key: "LOSS_CHECK", title: "Conferir as pesagens da torra", why: `A perda está em ${num(cur.lossPercent!)}%, abaixo do normal (${ROAST_LOSS_RANGE.min}–${ROAST_LOSS_RANGE.max}%). Costuma ser peso registrado errado.`, how: "Conferir o peso do café verde e do torrado nas últimas torras.", who: "Torra", when: "esta semana", impact: null, impactLabel: "custo mais exato", link: "/producao" });
   }
   if (input.newClients >= 2) {
     const impact = Math.round(Math.ceil(input.newClients / 2) * cur.ticket);
@@ -276,7 +290,8 @@ export function swot(i: SwotInput) {
   if (i.overdueAmount <= 0) strengths.push(`Ninguém em atraso${i.avgDaysToCash !== null ? `; o dinheiro entra em ${num(i.avgDaysToCash)} dias` : ""}.`);
   if (i.bestChannel?.marginPercent) strengths.push(`${i.bestChannel.name} com margem de ${num(i.bestChannel.marginPercent)}%.`);
   if (i.repeatRate >= 50) strengths.push(`${i.repeatRate}% dos clientes voltam a comprar.`);
-  if (i.cur.lossPercent !== null && i.prev.lossPercent !== null && i.cur.lossPercent - i.prev.lossPercent >= 2) weaknesses.push(`Perda na torra subiu de ${num(i.prev.lossPercent)}% para ${num(i.cur.lossPercent)}%.`);
+  if (roastLossStatus(i.cur.lossPercent) === "HIGH") weaknesses.push(`Perda na torra em ${num(i.cur.lossPercent!)}%, acima da faixa normal (${ROAST_LOSS_RANGE.min}–${ROAST_LOSS_RANGE.max}%).`);
+  if (roastLossStatus(i.cur.lossPercent) === "LOW") weaknesses.push(`Perda na torra em ${num(i.cur.lossPercent!)}%: abaixo do normal, confira as pesagens.`);
   const priceDrop = change(i.cur.pricePerKg, i.prev.pricePerKg);
   if (priceDrop !== null && priceDrop <= -8) weaknesses.push(`Preço por kg caiu ${Math.round(Math.abs(priceDrop))}%.`);
   if (i.adjustCoffees.length) weaknesses.push(`${i.adjustCoffees.slice(0, 3).join(", ")} vendem muito com margem abaixo da média.`);

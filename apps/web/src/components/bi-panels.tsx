@@ -206,7 +206,7 @@ export function BiPanels({ tab, days }: { tab: "vendas" | "caixa" | "operacao"; 
     <section className="mt-5 space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label={lastRoast ? `Torrado em ${monthLabel(lastRoast.month)}` : "Torrado no mês"} value={`${num(lastRoast?.roasted ?? 0, 0)} kg`} note={lastRoast ? `${lastRoast.batches} torra(s)${prevRoast ? ` · ${num(prevRoast.roasted, 0)} kg no mês anterior` : ""}` : undefined} />
-        <Kpi label="Perda na torra" value={lastRoast?.lossPercent === null || !lastRoast ? "—" : `${num(lastRoast.lossPercent)}%`} note={prevRoast?.lossPercent != null ? `mês anterior ${num(prevRoast.lossPercent)}%` : undefined} tone={lastRoast?.lossPercent != null && prevRoast?.lossPercent != null && lastRoast.lossPercent - prevRoast.lossPercent >= 2 ? "text-amber-700" : undefined} />
+        <Kpi label="Perda na torra" value={lastRoast?.lossPercent === null || !lastRoast ? "—" : `${num(lastRoast.lossPercent)}%`} note={`normal do processo: 15–18%${prevRoast?.lossPercent != null ? ` · mês anterior ${num(prevRoast.lossPercent)}%` : ""}`} tone={lastRoast?.lossPercent != null && (lastRoast.lossPercent > 18 || lastRoast.lossPercent < 13) ? "text-amber-700" : undefined} />
         <Kpi label="Café verde dá para" value={o.green.days === null ? "—" : `~${o.green.days} dias`} note={`${num(o.green.availableKg, 0)} kg em ${o.green.lots} lote(s) · usa ${num(o.green.consumed30, 0)} kg/mês`} tone={o.green.days !== null && o.green.days < 30 ? "text-red-700" : undefined} />
         <Kpi label="Do pedido à entrega" value={o.leadTimeDays === null ? "—" : `${num(o.leadTimeDays)} dias`} note={`mediana de ${o.delivered} entrega(s)`} />
       </div>
@@ -228,7 +228,7 @@ export function BiPanels({ tab, days }: { tab: "vendas" | "caixa" | "operacao"; 
         </Card>
       </div>
       <Card title="Torra mês a mês" help="kg de café verde, kg torrado e perda">
-        <Bars rows={o.roasts.map((r) => ({ label: monthLabel(r.month), value: r.roasted, note: `${r.batches} torra(s) · perda ${num(r.lossPercent)}%`, warn: (r.lossPercent ?? 0) >= 15 }))} format={(v) => `${num(v, 0)} kg`} />
+        <Bars rows={o.roasts.map((r) => ({ label: monthLabel(r.month), value: r.roasted, note: `${r.batches} torra(s) · perda ${num(r.lossPercent)}%`, warn: r.lossPercent !== null && (r.lossPercent > 18 || r.lossPercent < 13) }))} format={(v) => `${num(v, 0)} kg`} />
         {o.green.buyBy && <p className="mt-3 text-xs text-stone-600">No ritmo atual, o café verde acaba por volta de <b>{ddmm(o.green.runOutAt)}</b>. Para não parar, compre até <b>{ddmm(o.green.buyBy)}</b> (considerando 15 dias de entrega).</p>}
       </Card>
     </section>

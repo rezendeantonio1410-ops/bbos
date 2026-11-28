@@ -127,7 +127,7 @@ export function BiReading() {
               <TreeNode label="Custo por kg" node={t.costPerKg} format={(v) => `R$ ${num(v)}`} />
             </div>
             <div className="mt-2 flex flex-wrap gap-2 sm:pl-[34%]">
-              <TreeNode label="Perda na torra" node={t.lossPercent} format={(v) => `${num(v)}%`} points />
+              <TreeNode label="Perda na torra · normal 15–18%" node={t.lossPercent} format={(v) => `${num(v)}%`} points />
             </div>
           </div>
         </div>
@@ -164,7 +164,7 @@ export function BiReading() {
           <ul className="mt-3 divide-y divide-stone-100 text-sm">
             <li className="flex justify-between gap-3 py-2"><b>Café verde</b><span>{g.days === null ? "sem torra no período" : <>{num(g.availableKg, 0)} kg · acaba ~{ddmm(g.runOutAt)} · <b>comprar até {ddmm(g.buyBy)}</b></>}</span></li>
             <li className="flex justify-between gap-3 py-2"><b>Em atraso</b><span>{data.ahead.overdue > 0 ? <span className="font-bold text-red-700">{brl(data.ahead.overdue)}</span> : "nada vencido"}</span></li>
-            {data.ahead.whatIf && <li className="flex justify-between gap-3 py-2"><b>Margem</b><span>{num(data.current.marginPercent, 0)}% → <b>{num(data.ahead.whatIf.marginPercent, 0)}%</b> com +R$ {data.ahead.whatIf.priceIncrease}/kg e perda de {num(data.ahead.whatIf.lossTarget)}%</span></li>}
+            {data.ahead.whatIf && <li className="flex justify-between gap-3 py-2"><b>Margem</b><span>{num(data.current.marginPercent, 0)}% → <b>{num(data.ahead.whatIf.marginPercent, 0)}%</b> com +R$ {data.ahead.whatIf.priceIncrease}/kg no preço</span></li>}
             <li className="flex justify-between gap-3 py-2"><b>Meta do próximo mês</b><span>{data.ahead.goal ? brl(data.ahead.goal) : <>não definida · sugestão <b>{short(data.ahead.suggestedGoal)}</b></>}</span></li>
           </ul>
         </div>
