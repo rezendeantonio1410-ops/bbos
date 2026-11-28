@@ -980,7 +980,7 @@ export function AppShellV2({ children }: { children: ReactNode }) {
                 key={item.href}
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className={`flex min-h-[58px] min-w-0 flex-col items-center justify-center gap-1 rounded-2xl px-1 text-xs font-semibold transition sm:min-h-16 sm:text-sm ${
+                className={`flex min-h-[54px] min-w-0 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 text-xs font-semibold transition sm:min-h-14 sm:text-sm ${
                   active
                     ? "bg-emerald-50 text-emerald-800"
                     : "text-stone-500 hover:bg-stone-50 hover:text-stone-900"

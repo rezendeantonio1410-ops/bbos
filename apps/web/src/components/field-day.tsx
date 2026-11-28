@@ -3,7 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CheckCircle2, ClipboardCheck, Coffee, MapPin, MessageCircle, Navigation, Play, RefreshCw, Square } from "lucide-react";
+import { CheckCircle2, Coffee, Navigation, Play, RefreshCw, Square } from "lucide-react";
+import { WhatsButton } from "@/components/whatsapp-sheet";
+import { VisitOutcome } from "@/components/visit-outcome";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { fieldNative } from "@/lib/field-native";
 
@@ -30,6 +32,8 @@ export function FieldDay({ firstName }: { firstName: string }) {
   const [busy, setBusy] = useState(false);
   const [consentOpen, setConsentOpen] = useState(false);
   const [agree, setAgree] = useState(false);
+  const [arrived, setArrived] = useState<{ id: string; name: string } | null>(null);
+  const [phones, setPhones] = useState<Record<string, string | null>>({});
   const buffer = useRef<Array<{ at: string; lat: number; lng: number; accuracy: number | null; speed: number | null }>>([]);
   const api = getApiBaseUrl();
 
@@ -38,6 +42,13 @@ export function FieldDay({ firstName }: { firstName: string }) {
     if (!r?.ok) return setError("Não foi possível carregar o seu dia agora.");
     setError("");
     setData((await r.json()) as Today);
+  }, [api]);
+
+  // Celular dos clientes da carteira, para o WhatsApp em 1 toque.
+  useEffect(() => {
+    void fetch(`${api}/seller-portfolio`, { credentials: "include", cache: "no-store" })
+      .then(async (r) => r.ok && setPhones(Object.fromEntries(((await r.json()) as { customers: Array<{ id: string; phone: string | null }> }).customers.map((c) => [c.id, c.phone]))))
+      .catch(() => undefined);
   }, [api]);
 
   useEffect(() => { void load(); const t = window.setInterval(() => void load(), 60_000); return () => window.clearInterval(t); }, [load]);
@@ -98,97 +109,108 @@ export function FieldDay({ firstName }: { firstName: string }) {
   const status = data.day?.status ?? null;
   const pending = data.route.filter((r) => !r.visited);
   const potential = pending.reduce((t, r) => t + (r.value ?? 0), 0);
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+  const here = data.here?.kind === "CUSTOMER" && status === "ACTIVE" ? { id: data.here.id, name: data.here.name } : null;
+  const visiting = arrived ?? here;
+  const plan = pending[0]
+    ? `Comece por ${pending[0].name}: ${pending[0].reason.charAt(0).toLowerCase()}${pending[0].reason.slice(1)}.${pending[1] ? ` Depois, ${pending[1].name}.` : ""}`
+    : "Nenhum cliente da carteira pede visita hoje. Bom dia para prospectar.";
 
   return (
-    <div className="mx-auto max-w-[820px] pb-24">
-      {/* Manhã: rota sugerida e Iniciar dia */}
-      {(!status || status === "ENDED") && (
-        <section className="overflow-hidden rounded-[28px] bg-[radial-gradient(120%_80%_at_80%_0%,#134e44_0%,#0b1f1b_55%,#070b0a_100%)] p-6 text-white">
-          <p className="text-xs font-bold uppercase tracking-[.12em] text-emerald-300">{status === "ENDED" ? "Dia encerrado" : `Bom dia${firstName ? `, ${firstName}` : ""}`}</p>
-          {status === "ENDED" && s ? (
-            <>
-              <h1 className="mt-1 text-3xl font-bold tracking-tight">Belo dia{firstName ? `, ${firstName}` : ""}</h1>
-              <p className="text-sm text-stone-300">{plural(s.visits, "visita", "visitas")} · {s.visitsWithOrder} com pedido · {hm(s.totalMinutes)} em campo</p>
-              <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {[[km(s.km), "rodados"], [s.revenuePerKm !== null ? brl(s.revenuePerKm) : "—", "vendidos por km"], [hm(s.customerMinutes), "com clientes"], [s.kmPerVisit !== null ? km(s.kmPerVisit) : "—", "por visita"]].map(([v, l]) => (
-                  <div key={l} className="rounded-2xl border border-white/10 bg-white/5 p-3"><b className="block text-xl">{v}</b><span className="text-xs text-stone-300">{l}</span></div>
-                ))}
-              </div>
-              {data.insights.map((i) => <p key={i} className="mt-3 rounded-2xl border border-emerald-400/30 bg-emerald-400/10 p-3 text-sm text-emerald-50">{i}</p>)}
-            </>
-          ) : (
-            <>
-              <h1 className="mt-1 text-3xl font-bold leading-tight tracking-tight">{pending.length ? `Seu dia tem ${pending.length} ${pending.length === 1 ? "parada" : "paradas"}${potential ? ` e ${brl(potential)} em jogo` : ""}` : "Pronto para começar"}</h1>
-              <p className="mt-1 text-sm text-stone-300">Rota montada pela prioridade da sua carteira e pela distância.</p>
-            </>
-          )}
-          {status !== "ENDED" && (
-            <button type="button" disabled={busy} onClick={() => void start()} className="mt-5 flex w-full items-center justify-center gap-2 rounded-2xl bg-emerald-500 py-4 text-lg font-extrabold text-emerald-950 shadow-[0_12px_30px_-8px_rgba(16,185,129,.6)] disabled:opacity-60"><Play size={20} /> Iniciar dia</button>
-          )}
-          <p className="mt-2 text-center text-xs text-stone-400">🔒 O trajeto só é registrado entre Iniciar dia e Encerrar dia.</p>
-        </section>
-      )}
+    <div className="mx-auto max-w-[820px] pb-28">
+      <header className="mb-3 mt-1 flex items-end justify-between gap-3 px-1">
+        <div><h1 className="text-[22px] font-bold tracking-tight">Meu dia</h1>
+          <p className="text-[13px] text-stone-500">{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", timeZone: "America/Sao_Paulo" })}</p></div>
+        <span className={`rounded-full px-3 py-1 text-[11px] font-extrabold ${status === "ACTIVE" ? "bg-emerald-50 text-emerald-700" : status === "PAUSED" ? "bg-amber-50 text-amber-800" : "bg-stone-100 text-stone-600"}`}>
+          {status === "ACTIVE" ? (fieldNative.available() ? "● GPS ativo" : "● GPS com a tela aberta") : status === "PAUSED" ? "pausado" : status === "ENDED" ? "dia encerrado" : "GPS pronto"}
+        </span>
+      </header>
 
-      {/* Em rota */}
-      {(status === "ACTIVE" || status === "PAUSED") && s && (
-        <section className="rounded-[28px] bg-stone-950 p-5 text-white">
-          <div className="flex items-center justify-between text-sm">
-            <span className={`inline-flex items-center gap-2 font-bold ${status === "ACTIVE" ? "text-emerald-300" : "text-amber-300"}`}>
-              <span className={`size-2.5 rounded-full ${status === "ACTIVE" ? "bg-emerald-400 shadow-[0_0_0_6px_rgba(52,211,153,.2)]" : "bg-amber-400"}`} />
-              {status === "ACTIVE" ? `Dia em andamento desde ${time(data.day!.startedAt)}` : "Pausado"}
-            </span>
-            <span className="text-xs text-stone-400">{fieldNative.available() ? "GPS ativo, pode bloquear o tablet" : "mantenha esta tela aberta"}</span>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {[[km(s.km), "rodados hoje"], [`${s.visits}`, `${s.visits === 1 ? "visita" : "visitas"} · ${plural(s.visitsWithOrder, "com pedido", "com pedido")}`], [hm(s.totalMinutes - s.pauseMinutes), "em rota"]].map(([v, l]) => (
-              <div key={l} className="rounded-2xl bg-stone-800 p-3"><b className="block text-2xl">{v}</b><span className="text-xs text-stone-400">{l}</span></div>
+      {/* Cartão preto: a ação do dia */}
+      <section className="rounded-[22px] bg-black p-4 text-white">
+        {(!status || status === "ENDED") && !(status === "ENDED" && s) && (<>
+          <p className="text-[11px] font-extrabold uppercase tracking-[.1em] text-stone-400">{greet}{firstName ? `, ${firstName}` : ""} · rota de hoje</p>
+          <p className="mt-1.5 text-[42px] font-light leading-none tracking-[-.04em]">{potential ? brl(potential) : `${pending.length}`}<span className="ml-2 text-[15px] text-stone-400">{potential ? "em jogo" : pending.length === 1 ? "parada" : "paradas"}</span></p>
+          <p className="mt-1 text-[13px] text-stone-400">{pending.length ? plural(pending.length, "parada", "paradas") : "Sem paradas sugeridas"} · prioridade da carteira + distância</p>
+        </>)}
+        {status === "ENDED" && s && (<>
+          <p className="text-[11px] font-extrabold uppercase tracking-[.1em] text-stone-400">Fim do dia</p>
+          <p className="mt-1 text-[26px] font-bold tracking-tight">Belo dia{firstName ? `, ${firstName}` : ""}</p>
+          <p className="text-[13px] text-stone-400">{plural(s.visits, "visita", "visitas")} · {s.visitsWithOrder} com pedido · {hm(s.totalMinutes)} em campo</p>
+          <div className="mt-3 grid grid-cols-4 gap-2 border-t border-[#1f2a27] pt-3">
+            {[[km(s.km), "rodados"], [hm(s.customerMinutes), "com clientes"], [s.revenue ? brl(s.revenue) : "—", "vendido"], [s.revenuePerKm !== null ? brl(s.revenuePerKm) : "—", "por km"]].map(([v, l]) => (
+              <div key={l}><b className="block text-[15px]">{v}</b><span className="text-[11px] text-stone-400">{l}</span></div>
             ))}
           </div>
+          {data.insights.map((i) => <p key={i} className="mt-2 rounded-xl border border-emerald-400/30 bg-emerald-400/10 p-2.5 text-[13px] text-emerald-50">{i}</p>)}
+        </>)}
+        {(status === "ACTIVE" || status === "PAUSED") && s && (<>
+          <p className={`text-[11px] font-extrabold uppercase tracking-[.1em] ${status === "ACTIVE" ? "text-emerald-300" : "text-amber-300"}`}>{status === "ACTIVE" ? `Dia em andamento desde ${time(data.day!.startedAt)}` : "Dia pausado"}</p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            {[[km(s.km), "rodados hoje"], [`${s.visits}`, `${s.visits === 1 ? "visita" : "visitas"} · ${s.visitsWithOrder} c/ pedido`], [hm(Math.max(0, s.totalMinutes - s.pauseMinutes)), "em rota"]].map(([v, l]) => (
+              <div key={l} className="rounded-2xl bg-[#111916] p-3"><b className="block text-2xl font-light tracking-tight">{v}</b><span className="text-[11px] text-stone-400">{l}</span></div>
+            ))}
+          </div>
+        </>)}
+        {status === "ACTIVE" || status === "PAUSED" ? (
           <div className="mt-3 grid grid-cols-2 gap-2">
             {status === "ACTIVE"
-              ? <button type="button" disabled={busy} onClick={() => void dayAction("PAUSE")} className="flex items-center justify-center gap-2 rounded-2xl border border-stone-600 py-3.5 font-bold text-stone-200"><Coffee size={18} /> Pausar</button>
-              : <button type="button" disabled={busy} onClick={() => void dayAction("RESUME")} className="flex items-center justify-center gap-2 rounded-2xl border border-emerald-500 py-3.5 font-bold text-emerald-300"><Play size={18} /> Retomar</button>}
-            <button type="button" disabled={busy} onClick={() => void dayAction("END")} className="flex items-center justify-center gap-2 rounded-2xl bg-white py-3.5 font-extrabold text-stone-950"><Square size={16} /> Encerrar dia</button>
+              ? <button type="button" disabled={busy} onClick={() => void dayAction("PAUSE")} className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-stone-700 font-bold text-stone-200"><Coffee size={18} /> Pausar</button>
+              : <button type="button" disabled={busy} onClick={() => void dayAction("RESUME")} className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl border border-emerald-500 font-bold text-emerald-300"><Play size={18} /> Retomar</button>}
+            <button type="button" disabled={busy} onClick={() => void dayAction("END")} className="flex min-h-[52px] items-center justify-center gap-2 rounded-2xl bg-white font-extrabold text-black"><Square size={16} /> Encerrar dia</button>
           </div>
-        </section>
-      )}
+        ) : (
+          <button type="button" disabled={busy} onClick={() => void start()} className="mt-3 flex w-full items-center gap-3 rounded-2xl bg-[#0d1a17] p-2.5 text-left disabled:opacity-60">
+            <span className="grid size-[52px] place-items-center rounded-full bg-white text-black"><Play size={20} fill="currentColor" /></span>
+            <span><b className="block">{status === "ENDED" ? "Iniciar outro dia" : "Iniciar dia"}</b><span className="text-xs text-stone-400">o trajeto só conta até Encerrar dia</span></span>
+          </button>
+        )}
+      </section>
 
-      {data.here && status === "ACTIVE" && (
-        <section className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-[22px] border-2 border-teal-700 bg-teal-50 p-4">
-          <div><p className="flex items-center gap-1.5 text-lg font-bold"><MapPin size={18} className="text-teal-700" /> Você está em {data.here.name}</p><p className="text-sm text-teal-800">{data.here.since ? `chegou às ${time(data.here.since)}` : "agora"}</p></div>
-          {data.here.kind === "CUSTOMER" && <Link href={`/atendimento?cliente=${encodeURIComponent(data.here.id)}`} className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-teal-700 px-5 font-extrabold text-white"><ClipboardCheck size={18} /> Registrar visita</Link>}
+      {/* Chegou no cliente: "Como foi?" */}
+      {visiting && <VisitOutcome key={visiting.id} customer={visiting} phone={phones[visiting.id] ?? null} onDone={() => { setArrived(null); void load(); }} />}
+
+      {/* Leitura do BBOS */}
+      {status !== "ENDED" && (
+        <section className="mt-2.5 rounded-[22px] bg-[linear-gradient(135deg,#032d60,#0b5cab)] p-4 text-white">
+          <p className="text-[11px] font-extrabold uppercase tracking-[.1em] text-sky-200">✦ BBOS · plano do dia</p>
+          <p className="mt-1.5 text-[17px] font-bold leading-snug">{plan}</p>
         </section>
       )}
 
       {error && <p role="alert" className="mt-3 rounded-2xl bg-red-50 p-3 text-sm text-red-700">{error}</p>}
 
-      {/* Rota */}
-      <section className="mt-3 rounded-[24px] border border-stone-200 bg-white p-5">
-        <h2 className="text-lg font-bold">Rota de hoje</h2>
-        <p className="text-sm text-stone-500">ordem sugerida pelo BBOS: prioridade da carteira + distância</p>
-        {data.route.length === 0 ? <p className="mt-3 text-sm text-stone-500">Nenhum cliente da carteira pede visita hoje.</p> : (
-          <ol className="mt-2 divide-y divide-stone-100">
-            {data.route.map((r, i) => (
-              <li key={r.customerId} className="grid grid-cols-[34px_1fr_auto] items-center gap-3 py-3">
-                <span className={`grid size-8 place-items-center rounded-full text-sm font-extrabold ${r.visited ? "bg-emerald-100 text-emerald-800" : i === data.route.findIndex((x) => !x.visited) ? "bg-teal-700 text-white" : "bg-stone-100 text-stone-500"}`}>{r.visited ? <CheckCircle2 size={16} /> : i + 1}</span>
-                <div className="min-w-0"><p className="font-bold">{r.name}</p><p className="text-sm text-stone-500">{[r.distanceKm !== null ? `a ${km(r.distanceKm)}` : null, r.reason, r.value ? `~${brl(r.value)}` : null].filter(Boolean).join(" · ")}</p></div>
+      {/* Rota em linha do tempo */}
+      {data.route.length > 0 && (
+        <ol className="relative mt-2 space-y-2 pl-6 before:absolute before:bottom-3 before:left-2 before:top-3 before:w-0.5 before:bg-slate-200">
+          {data.route.map((r) => {
+            const next = !r.visited && r.customerId === pending[0]?.customerId;
+            return (
+              <li key={r.customerId} className={`relative rounded-2xl border bg-white p-3 before:absolute before:-left-[21px] before:top-4 before:size-3 before:rounded-full before:border-[2.5px] ${r.visited ? "border-slate-200 opacity-60 before:border-emerald-600 before:bg-emerald-600" : next ? "border-sky-300 shadow-[0_0_0_3px_#dbeafe] before:border-[#0b5cab] before:bg-[#0b5cab]" : "border-slate-200 before:border-[#0b5cab] before:bg-white"}`}>
+                <p className="text-[10.5px] font-extrabold uppercase tracking-wider text-[#0b5cab]">{r.visited ? "✓ visitado" : `${pending.findIndex((x) => x.customerId === r.customerId) + 1}ª parada`}{r.distanceKm !== null ? ` · a ${km(r.distanceKm)}` : ""}</p>
+                <b className="text-[14.5px]">{r.name}{r.value ? ` · ~${brl(r.value)}` : ""}</b>
+                <p className="text-xs text-slate-500">{r.reason}</p>
                 {!r.visited && (
-                  <div className="flex gap-1.5">
-                    <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(r.name)}`} target="_blank" rel="noreferrer" aria-label={`Navegar até ${r.name}`} className="grid size-12 place-items-center rounded-2xl bg-stone-900 text-white"><Navigation size={18} /></a>
-                    <Link href={`/clientes?cliente=${encodeURIComponent(r.customerId)}`} aria-label={`Abrir ${r.name}`} className="grid size-12 place-items-center rounded-2xl border border-stone-200 text-stone-700"><MessageCircle size={18} /></Link>
+                  <div className="mt-2 flex gap-1.5">
+                    <WhatsButton compact target={{ customerId: r.customerId, customerName: r.name, phone: phones[r.customerId] ?? null, kinds: ["VISIT", "RESTOCK", "FREE"] }} />
+                    <a href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(r.name)}`} target="_blank" rel="noreferrer" aria-label={`Navegar até ${r.name}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl border border-slate-200 text-[13px] font-extrabold"><Navigation size={15} /> Ir</a>
+                    {status === "ACTIVE"
+                      ? <button type="button" onClick={() => setArrived({ id: r.customerId, name: r.name })} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl bg-[#0b5cab] text-[13px] font-extrabold text-white"><CheckCircle2 size={15} /> Cheguei</button>
+                      : <Link href={`/pedidos?novo=1&cliente=${encodeURIComponent(r.customerId)}`} className="inline-flex min-h-11 flex-1 items-center justify-center gap-1 rounded-xl bg-[#0b5cab] text-[13px] font-extrabold text-white">+ Pedido</Link>}
                   </div>
                 )}
               </li>
-            ))}
-          </ol>
-        )}
-      </section>
+            );
+          })}
+        </ol>
+      )}
 
       {/* Paradas do dia */}
       {s && s.stops.length > 0 && (
-        <section className="mt-3 rounded-[24px] border border-stone-200 bg-white p-5">
-          <h2 className="text-lg font-bold">Suas paradas</h2>
-          <ul className="mt-2 divide-y divide-stone-100 text-sm">
+        <section className="mt-3 rounded-[22px] border border-stone-200 bg-white p-4">
+          <p className="text-[11px] font-extrabold uppercase tracking-[.1em] text-stone-500">Suas paradas</p>
+          <ul className="mt-1 divide-y divide-stone-100 text-sm">
             {s.stops.map((stop) => (
               <li key={stop.start} className="flex justify-between gap-3 py-2.5">
                 <span><b>{stop.place?.name ?? "Parada"}</b><span className="text-stone-500"> · {time(stop.start)} · {stop.minutes} min{stop.kmFromPrevious !== null ? ` · ${km(stop.kmFromPrevious)}` : ""}</span></span>
