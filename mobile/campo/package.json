@@ -1,0 +1,17 @@
+{
+  "name": "bispo-campo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "BBOS Campo: app Android que abre o Meu dia e registra o trajeto do tablet entre Iniciar e Encerrar dia.",
+  "scripts": {
+    "sync": "cap sync android"
+  },
+  "dependencies": {
+    "@capacitor-community/background-geolocation": "1.3.2",
+    "@capacitor/android": "8.6.3",
+    "@capacitor/core": "8.6.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "8.6.3"
+  }
+}

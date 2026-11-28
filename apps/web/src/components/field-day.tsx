@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckCircle2, ClipboardCheck, Coffee, MapPin, MessageCircle, Navigation, Play, RefreshCw, Square } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { fieldNative } from "@/lib/field-native";
 
 type Stop = { start: string; end: string; minutes: number; place: { id: string; name: string; kind: string } | null; kmFromPrevious: number | null; sold: number };
 type Today = {
@@ -21,12 +22,6 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 const hm = (min: number) => `${Math.floor(min / 60)}h${String(Math.round(min % 60)).padStart(2, "0")}`;
 const time = (iso: string) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 const SEND_EVERY_MS = 60_000;
-
-/** O app nativo (BBOS Campo) registra o GPS em segundo plano; no navegador, só com a tela aberta. */
-function nativeTracker(): { start: () => void; stop: () => void } | null {
-  const w = window as unknown as { BbosCampo?: { start: () => void; stop: () => void } };
-  return w.BbosCampo ?? null;
-}
 
 export function FieldDay({ firstName }: { firstName: string }) {
   const [data, setData] = useState<Today | null>(null);
@@ -55,7 +50,8 @@ export function FieldDay({ firstName }: { firstName: string }) {
   // GPS pelo navegador enquanto a tela está aberta (no app nativo, quem registra é o app).
   const active = data?.day?.status === "ACTIVE";
   useEffect(() => {
-    if (!active || nativeTracker() || !("geolocation" in navigator)) return;
+    if (active && fieldNative.available()) { void fieldNative.start(); return; } // app: GPS em segundo plano
+    if (!active || !("geolocation" in navigator)) return;
     const watch = navigator.geolocation.watchPosition(
       (pos) => buffer.current.push({ at: new Date(pos.timestamp).toISOString(), lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy ?? null, speed: pos.coords.speed ?? null }),
       () => undefined,
@@ -68,7 +64,7 @@ export function FieldDay({ firstName }: { firstName: string }) {
   const dayAction = async (action: "START" | "PAUSE" | "RESUME" | "END") => {
     setBusy(true);
     setError("");
-    if (action !== "START") await flush();
+    if (action !== "START") await Promise.all([flush(), fieldNative.flush()]);
     const r = await fetch(`${api}/field/day`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ action }) }).catch(() => null);
     setBusy(false);
     if (!r?.ok) {
@@ -76,9 +72,7 @@ export function FieldDay({ firstName }: { firstName: string }) {
       if (r?.status === 403) setConsentOpen(true);
       return setError(b.message ?? "Não foi possível atualizar o dia.");
     }
-    const tracker = nativeTracker();
-    if (tracker && (action === "START" || action === "RESUME")) tracker.start();
-    if (tracker && (action === "PAUSE" || action === "END")) tracker.stop();
+    if (action === "PAUSE" || action === "END") await fieldNative.stop();
     await load();
   };
 
@@ -142,7 +136,7 @@ export function FieldDay({ firstName }: { firstName: string }) {
               <span className={`size-2.5 rounded-full ${status === "ACTIVE" ? "bg-emerald-400 shadow-[0_0_0_6px_rgba(52,211,153,.2)]" : "bg-amber-400"}`} />
               {status === "ACTIVE" ? `Dia em andamento desde ${time(data.day!.startedAt)}` : "Pausado"}
             </span>
-            <span className="text-xs text-stone-400">{nativeTracker() ? "GPS em segundo plano" : "mantenha esta tela aberta"}</span>
+            <span className="text-xs text-stone-400">{fieldNative.available() ? "GPS ativo, pode bloquear o tablet" : "mantenha esta tela aberta"}</span>
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {[[km(s.km), "rodados hoje"], [`${s.visits}`, `${s.visits === 1 ? "visita" : "visitas"} · ${plural(s.visitsWithOrder, "com pedido", "com pedido")}`], [hm(s.totalMinutes - s.pauseMinutes), "em rota"]].map(([v, l]) => (

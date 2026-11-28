@@ -1,0 +1,61 @@
+name: Bispo Campo (Android)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [release/bbos-rc1-consolidation]
+    paths: ["mobile/campo/**", ".github/workflows/campo-android.yml"]
+  pull_request:
+    paths: ["mobile/campo/**", ".github/workflows/campo-android.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile/campo
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@v3
+      - name: Instalar Capacitor
+        run: npm ci --no-audit --no-fund
+      - name: Copiar configuração e plugins para o Android
+        run: npx cap sync android
+      - name: Chave de assinatura
+        env:
+          KEYSTORE_B64: ${{ secrets.CAMPO_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/campo.keystore"
+            echo "CAMPO_KEYSTORE_FILE=$RUNNER_TEMP/campo.keystore" >> "$GITHUB_ENV"
+          else
+            echo "::warning::Sem a chave CAMPO_KEYSTORE_B64: o APK sai com a chave de teste."
+          fi
+      - name: Gerar APK
+        env:
+          CAMPO_VERSION_CODE: ${{ github.run_number }}
+          CAMPO_KEYSTORE_PASSWORD: ${{ secrets.CAMPO_KEYSTORE_PASSWORD }}
+          CAMPO_KEY_ALIAS: ${{ secrets.CAMPO_KEY_ALIAS }}
+          CAMPO_KEY_PASSWORD: ${{ secrets.CAMPO_KEYSTORE_PASSWORD }}
+        working-directory: mobile/campo/android
+        run: |
+          chmod +x gradlew
+          if [ -n "$CAMPO_KEYSTORE_FILE" ]; then ./gradlew --no-daemon assembleRelease; else ./gradlew --no-daemon assembleDebug; fi
+          mkdir -p ../out
+          cp $(ls app/build/outputs/apk/release/*.apk app/build/outputs/apk/debug/*.apk 2>/dev/null | head -1) ../out/bispo-campo.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bispo-campo-apk
+          path: mobile/campo/out/bispo-campo.apk
+          retention-days: 30

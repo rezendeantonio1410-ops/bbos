@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Bispo Campo</string>
+    <string name="title_activity_main">Bispo Campo</string>
+    <string name="package_name">com.bispocoffees.campo</string>
+    <string name="custom_url_scheme">com.bispocoffees.campo</string>
+    <string name="capacitor_background_geolocation_notification_channel_name">Dia em campo</string>
+    <string name="capacitor_background_geolocation_notification_color">#0F766E</string>
+</resources>
