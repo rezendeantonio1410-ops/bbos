@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, CheckCircle2, Flame, MessageCircle, Pencil, RefreshCw, Users, Wheat } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
+import { BiReading } from "@/components/bi-reading";
+import { BiPanels } from "@/components/bi-panels";
 
 type Source = "MANUAL" | "ROASTS" | "LINE" | "AVERAGE" | "NONE";
 type Bucket = { name: string; revenue: number; kg: number; orders: number; cost: number; margin: number | null; marginPercent: number | null; pricePerKg: number | null; estimatedShare: number };
@@ -112,9 +114,17 @@ function CostEditor({ material, onSaved }: { material: Material; onSaved: () => 
   );
 }
 
+type Tab = "leitura" | "margem" | "clientes" | "materia" | "vendas" | "caixa" | "operacao";
+const TABS: Array<[Tab, string]> = [["leitura", "Leitura"], ["margem", "Margem"], ["clientes", "Clientes"], ["materia", "Matéria-prima"], ["vendas", "Vendas"], ["caixa", "Caixa"], ["operacao", "Operação"]];
+const OVERVIEW_TABS: Tab[] = ["margem", "clientes", "materia"];
+
 export function BusinessIntelligence() {
   const [days, setDays] = useState(90);
-  const [tab, setTab] = useState<"margem" | "clientes" | "materia">("margem");
+  const [tab, setTab] = useState<Tab>("leitura");
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("aba");
+    if (wanted && TABS.some(([key]) => key === wanted)) setTab(wanted as Tab);
+  }, []);
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
@@ -149,9 +159,9 @@ export function BusinessIntelligence() {
         <div>
           <p className="text-xs text-stone-500">Análises › <strong className="text-stone-800">Inteligência</strong></p>
           <h1 className="mt-2 text-3xl font-bold">Inteligência</h1>
-          <p className="mt-1 text-sm text-stone-500">Onde ganhamos dinheiro e quem sustenta a operação. Cada número mostra de onde vem.</p>
+          <p className="mt-1 text-sm text-stone-500">O que deu resultado, o que segurou e o que vem pela frente. Cada número mostra de onde vem.</p>
         </div>
-        <div className="flex gap-1 rounded-xl border border-stone-200 bg-white p-1" role="group" aria-label="Período">
+        <div className={`flex gap-1 rounded-xl border border-stone-200 bg-white p-1 ${tab === "leitura" ? "invisible" : ""}`} role="group" aria-label="Período">
           {[30, 90, 365].map((d) => (
             <button key={d} type="button" onClick={() => setDays(d)} className={`rounded-lg px-3 py-1.5 text-xs font-bold ${days === d ? "bg-stone-100 text-stone-900" : "text-stone-500"}`}>{d === 365 ? "Ano" : `${d} dias`}</button>
           ))}
@@ -159,16 +169,16 @@ export function BusinessIntelligence() {
       </header>
 
       <nav className="mt-5 flex flex-wrap gap-2" aria-label="Painéis">
-        {([["margem", "Margem"], ["clientes", "Clientes"], ["materia", "Matéria-prima"]] as const).map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setTab(key)} className={`rounded-xl border px-4 py-2.5 text-sm font-bold ${tab === key ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600"}`}>{label}</button>
-        ))}
-        {["Vendas", "Caixa", "Operação"].map((label) => (
-          <span key={label} className="rounded-xl border border-dashed border-stone-200 px-4 py-2.5 text-sm font-semibold text-stone-400">{label} · em breve</span>
+        {TABS.map(([key, label]) => (
+          <button key={key} type="button" aria-pressed={tab === key} onClick={() => setTab(key)} className={`rounded-xl border px-4 py-2.5 text-sm font-bold ${tab === key ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600"}`}>{label}</button>
         ))}
       </nav>
 
-      {error && <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
-      {loading && !data && <p className="mt-6 flex items-center gap-2 text-sm text-stone-500"><RefreshCw size={15} className="animate-spin" /> Calculando…</p>}
+      {tab === "leitura" && <BiReading />}
+      {(tab === "vendas" || tab === "caixa" || tab === "operacao") && <BiPanels tab={tab} days={days} />}
+
+      {error && OVERVIEW_TABS.includes(tab) && <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-700">{error}</p>}
+      {loading && !data && OVERVIEW_TABS.includes(tab) && <p className="mt-6 flex items-center gap-2 text-sm text-stone-500"><RefreshCw size={15} className="animate-spin" /> Calculando…</p>}
 
       {data && trust && m && (tab === "margem" || tab === "materia") && trust.percent < 100 && (
         <div className="mt-5 flex flex-wrap items-center gap-4 rounded-2xl border border-l-4 border-stone-200 border-l-amber-600 bg-white p-4">
