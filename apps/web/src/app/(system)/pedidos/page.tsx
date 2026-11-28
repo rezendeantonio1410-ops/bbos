@@ -27,6 +27,7 @@ import { Badge, Card } from "@bbos/ui";
 import { calculateSalesLineDiscount } from "@bbos/shared";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { OrderBillingPdfButton } from "@/components/order-billing-pdf-button";
+import { OrderDeliveryDateChange } from "@/components/order-delivery-date-change";
 import { OrderDueDateChange } from "@/components/order-due-date-change";
 import { OrderPdfLink } from "@/components/order-pdf-link";
 import {
@@ -5442,6 +5443,9 @@ function OrderDrawer({
                 )}
                 <MiniValue label="Frete" value={freightLabel} />
                 <MiniValue label="Entrega" value={deliveryLabel} />
+                {canOperate && ["DRAFT", "CONFIRMED", "RESERVED", "PICKING", "IN_PRODUCTION", "READY_TO_SHIP", "INVOICED"].includes(order.status) && (
+                  <OrderDeliveryDateChange orderId={order.id} currentDate={order.expectedDeliveryDate ?? null} onDone={onChanged} />
+                )}
                 {order.carrierName && (
                   <MiniValue label="Transportadora" value={order.carrierName} />
                 )}

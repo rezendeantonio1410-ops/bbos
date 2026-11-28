@@ -41,6 +41,7 @@ import { loadSalesOrderBillingData } from "./sales-order-billing-data";
 import { buildSalesOrderBillingPdf } from "./sales-order-billing-pdf";
 import { fourteenDayDueDate, parseTermCorrection } from "./sales-order-term-correction";
 import { parseDueDateChange, RESCHEDULABLE_RECEIVABLE } from "./receivable-due-date-change";
+import { parseDeliveryDateChange, RESCHEDULABLE_DELIVERY } from "./delivery-date-change";
 import { SalesOrderTermApprovalService } from "./sales-order-term-approval.service";
 import { isDesignatedTermCreditApprover } from "./sales-order-term-approval-policy";
 import {
@@ -871,6 +872,54 @@ export class SalesOrdersController {
    * Muda apenas a data do título em aberto; valor, NF-e, entrega e
    * pagamentos ficam iguais. Fica no histórico com motivo e data anterior.
    */
+  /** Remarcar a entrega (só José ou Suzi): muda a data prevista e fica no histórico. */
+  @Patch(":id/delivery-date")
+  async changeDeliveryDate(
+    @Param("id") id: string,
+    @Req() request: any,
+    @Body() body: unknown,
+  ) {
+    const actor = await this.actorForOrder(request, id);
+    if (!isDesignatedTermCreditApprover(actor)) {
+      throw new ForbiddenException("Somente José ou Suzi podem remarcar a entrega.");
+    }
+    let change: ReturnType<typeof parseDeliveryDateChange>;
+    try { change = parseDeliveryDateChange(body); }
+    catch (error) {
+      throw new BadRequestException(error instanceof Error ? error.message : "Data inválida.");
+    }
+    return this.salesOrders.database.$transaction(async tx => {
+      const rows = await tx.$queryRawUnsafe<Array<{ status: string; expectedDeliveryDate: Date | null }>>(
+        `SELECT status::text AS status,"expectedDeliveryDate" FROM "SalesOrder" WHERE id=$1 AND "companyId"=$2 FOR UPDATE`,
+        id, actor.companyId,
+      );
+      const order = rows[0];
+      if (!order) throw new BadRequestException("Pedido não encontrado.");
+      if (!(RESCHEDULABLE_DELIVERY as readonly string[]).includes(order.status)) {
+        throw new BadRequestException("Este pedido já saiu, foi entregue ou cancelado; a entrega não pode ser remarcada.");
+      }
+      const previous = order.expectedDeliveryDate ? new Date(order.expectedDeliveryDate) : null;
+      if (previous && previous.toISOString().slice(0, 10) === change.deliveryDate.toISOString().slice(0, 10)) {
+        throw new BadRequestException("A nova data é igual à entrega atual.");
+      }
+      await tx.$executeRawUnsafe(
+        `UPDATE "SalesOrder" SET "expectedDeliveryDate"=$2,"updatedAt"=NOW() WHERE id=$1 AND "companyId"=$3`,
+        id, change.deliveryDate, actor.companyId,
+      );
+      await tx.$executeRawUnsafe(
+        `INSERT INTO "SalesOrderEditAudit"
+        (id,"companyId","salesOrderId","actorId","actorName","actorRole",reason,
+         "beforeSnapshot","afterSnapshot","createdAt")
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9::jsonb,NOW())`,
+        randomUUID(), actor.companyId, id, actor.id, actor.name, actor.role,
+        `Entrega remarcada: ${change.reason}`,
+        JSON.stringify({ expectedDeliveryDate: previous }),
+        JSON.stringify({ expectedDeliveryDate: change.deliveryDate }),
+      );
+      return { ok: true, orderId: id, deliveryDate: change.deliveryDate, previousDeliveryDate: previous };
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+  }
+
   @Patch(":id/due-date")
   async changeDueDate(
     @Param("id") id: string,
