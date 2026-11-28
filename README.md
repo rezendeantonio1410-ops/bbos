@@ -57,3 +57,19 @@ Procedimento resumido: criar os serviços a partir do `render.yaml`, preencher
 as variáveis secretas no painel do Render, aguardar o health check da API,
 executar `pnpm db:migrate:deploy` com a `DATABASE_URL` do staging e então
 acessar o endereço do Web para o primeiro teste online.
+
+## Piloto de quilometragem no Android
+
+A página `/quilometragem` mostra os percursos sincronizados no fuso de São Paulo.
+O total diário usa a data de início de cada percurso. Administradores e diretores
+veem os registros da própria empresa. Os demais usuários veem seus registros.
+
+O aplicativo Android abre a mesma página do BBOS e usa o GPS do aparelho entre
+**Iniciar percurso** e **Encerrar percurso**. O botão de encerramento também
+fica na notificação do Android. Só o resumo é enviado ao BBOS, sem coordenadas.
+Ao reabrir a página com conexão e a mesma conta, os resumos pendentes são enviados.
+
+O workflow **BBOS Android mileage** gera um APK de teste. Para staging, execute-o
+com a origem HTTPS do BBOS desse ambiente. A API deve estar com a migration
+`20261128000000_mileage` aplicada. Faça a primeira medição com a tela bloqueada,
+teste o encerramento sem conexão e compare o resultado com o hodômetro.

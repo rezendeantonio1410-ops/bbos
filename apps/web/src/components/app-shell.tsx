@@ -17,6 +17,7 @@ import {
   Globe2,
   House,
   LayoutDashboard,
+  MapPin,
   Menu,
   PackageCheck,
   PackageOpen,
@@ -40,6 +41,7 @@ const nav = [
   { href: "/blends", label: "Blends", icon: Boxes },
   { href: "/produtos", label: "Produtos", icon: PackageCheck },
   { href: "/pedidos", label: "Pedidos", icon: ShoppingBag },
+  { href: "/quilometragem", label: "Quilometragem", icon: MapPin },
   { href: "/vendas", label: "Vendas", icon: BarChart3 },
   { href: "/commerce", label: "Commerce", icon: Globe2 },
   { href: "/bi", label: "BI Executivo", icon: BrainCircuit },
@@ -165,6 +167,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             />
           </div>
           <div className="flex items-center gap-3">
+            <Link href="/quilometragem" aria-label="Quilometragem" title="Quilometragem"
+              className="rounded-lg p-2 text-stone-600 hover:bg-stone-100 lg:hidden">
+              <MapPin size={18} />
+            </Link>
             <button
               aria-label="Notificações"
               className="relative rounded-xl border bg-white p-2.5 text-stone-600"

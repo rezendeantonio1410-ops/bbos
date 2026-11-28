@@ -465,6 +465,7 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   sessions     AuthSession[]
+  mileageTrips MileageTrip[]
 
   @@index([companyId])
 }
@@ -2172,4 +2173,19 @@ model CostTariff {
 
   @@index([companyId, type, validFrom])
   @@index([costCenterId, active])
+}
+
+model MileageTrip {
+  id             String   @db.Uuid
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle        String   @db.VarChar(80)
+  startedAt      DateTime
+  endedAt        DateTime
+  distanceMeters Int
+  incomplete     Boolean
+  createdAt      DateTime @default(now())
+
+  @@id([userId, id])
+  @@index([startedAt])
 }

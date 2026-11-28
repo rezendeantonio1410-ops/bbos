@@ -1,0 +1,26 @@
+plugins {
+    id 'com.android.application' version '8.9.3'
+}
+
+android {
+    namespace 'br.com.bispocoffees.mileage'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'br.com.bispocoffees.mileage'
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName '0.1.0'
+        def webOrigin = providers.gradleProperty("bbosWebOrigin").orElse("https://app.bispocoffees.com.br").get()
+        if (!(webOrigin ==~ /https:\/\/[a-zA-Z0-9.-]+/)) {
+            throw new GradleException("bbosWebOrigin deve ser uma origem HTTPS sem caminho.")
+        }
+        buildConfigField 'String', 'WEB_ORIGIN', '"' + webOrigin + '"'
+    }
+    buildFeatures {
+        buildConfig true
+    }
+}
+dependencies {
+    implementation 'androidx.webkit:webkit:1.13.0'
+}
