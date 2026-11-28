@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CheckCircle2, ClipboardCheck, Coffee, MapPin, MessageCircle, Navigation, Play, RefreshCw, Square } from "lucide-react";
 import { getApiBaseUrl } from "@/lib/api-url";
 import { fieldNative } from "@/lib/field-native";
@@ -198,9 +199,11 @@ export function FieldDay({ firstName }: { firstName: string }) {
         </section>
       )}
 
-      {consentOpen && (
-        <div role="dialog" aria-modal="true" aria-labelledby="consent-title" className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 sm:items-center">
-          <div className="max-h-[92vh] w-full max-w-[640px] overflow-y-auto rounded-t-[28px] bg-white p-6 sm:rounded-[28px]">
+      {consentOpen && typeof document !== "undefined" && createPortal(
+        // Portal no <body>: fica por cima da barra inferior do BBOS em qualquer tela.
+        <div role="dialog" aria-modal="true" aria-labelledby="consent-title" className="fixed inset-0 z-[200] flex items-end justify-center bg-black/45 sm:items-center sm:p-4">
+          <div className="flex max-h-[100dvh] w-full max-w-[640px] flex-col overflow-hidden rounded-t-[28px] bg-white sm:max-h-[92dvh] sm:rounded-[28px]">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6 pb-3">
             <div className="grid size-12 place-items-center rounded-2xl bg-emerald-50 text-2xl">📍</div>
             <h2 id="consent-title" className="mt-3 text-2xl font-bold">Antes de começar o seu dia</h2>
             <p className="mt-1 text-[15px] text-stone-700">Para ajudar você a vender mais com menos tempo na estrada, o BBOS Campo registra a localização do tablet <b>somente entre &quot;Iniciar dia&quot; e &quot;Encerrar dia&quot;</b>.</p>
@@ -216,11 +219,15 @@ export function FieldDay({ firstName }: { firstName: string }) {
               <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 size-5 accent-emerald-600" />
               Li e concordo com o registro da localização do tablet durante o meu dia de trabalho, para as finalidades acima.
             </label>
-            <button type="button" disabled={!agree || busy} onClick={() => void acceptAndStart()} className="mt-3 w-full rounded-2xl bg-emerald-500 py-4 text-base font-extrabold text-emerald-950 disabled:opacity-40">Concordo e iniciar dia</button>
-            <button type="button" onClick={() => setConsentOpen(false)} className="mt-2 w-full py-2 text-sm font-bold text-stone-500">Agora não</button>
-            <p className="mt-1 text-center text-[11px] text-stone-400">Versão {data.consent.version} · Bispo Coffees</p>
+            </div>
+            <div className="border-t border-stone-100 bg-white px-6 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+              <button type="button" disabled={!agree || busy} onClick={() => void acceptAndStart()} className="w-full rounded-2xl bg-emerald-500 py-4 text-base font-extrabold text-emerald-950 disabled:opacity-40">{agree ? "Concordo e iniciar dia" : "Marque \"Li e concordo\" para continuar"}</button>
+              <button type="button" onClick={() => setConsentOpen(false)} className="mt-1 w-full py-2 text-sm font-bold text-stone-500">Agora não</button>
+              <p className="text-center text-[11px] text-stone-400">Versão {data.consent.version} · Bispo Coffees</p>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
       <p className="mt-4 text-center text-xs text-stone-400">Para retirar a concordância, fale com José ou Suzi ou use Configurações no app.</p>
     </div>
